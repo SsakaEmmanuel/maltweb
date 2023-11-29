@@ -29,7 +29,7 @@ body{background-color: white;
       padding: 35px;
   }
   .cont5{font-family: comic sans ms;
-          font-size: 200%;
+          font-size: 100%;
           text-align: center;
           color: green;
 
@@ -55,12 +55,11 @@ h1{font-family: cooper black;
 h3{background-color: black;
   color: white;
   text-align: center;
-  font-size: 35px;
+  font-size: 20px;
 
 }
 fieldset{border-width: 1px;
-	   
-	     border-style: blue;
+	      border-style: blue;
 
 
 }
@@ -75,9 +74,9 @@ ul{position: center;
 }
  img{border-radius: 15px;
 }
-.submit{
-  text-decoration: none;
-}
+.submit{text-decoration: none;
+} 
+
 h5{font-size: 25px;
 
 }
