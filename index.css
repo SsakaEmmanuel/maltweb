@@ -29,15 +29,13 @@ body{background-color: white;
           color: green;
 
   }
-  a{text-decoration: none;
 
-  }
 label{font-family: comic sans ms;
      font-size: 100%;
      color: blue;
 }
 
-input{border-radius: 5px; border: none;
+input{border-radius: 0.5px; border: 1px;
 
 }
 
