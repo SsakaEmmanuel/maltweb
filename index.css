@@ -78,7 +78,7 @@ ul {
     padding: 0;
     overflow: hidden;
     background-color: grey;
-    position: fixed;
+    box-shadow: 2px 2px 2px;
 }
 
 li {
