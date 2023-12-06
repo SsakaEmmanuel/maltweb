@@ -51,6 +51,7 @@ h3{background-color: pink;
   color: white;
   text-align: center;
   font-size: 20px;
+  text-shadow: 2px 2px 5px black;
 
 }
 fieldset{border-width: 1px;
