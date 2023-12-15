@@ -90,8 +90,7 @@ ul {
 }
 
 li {overflow: hidden;
-    background-color: grey;    
-    float: left;
+    background-color: brown;
     border-right:1px solid #bbb;
 }
 
