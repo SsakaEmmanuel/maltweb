@@ -92,6 +92,7 @@ ul {
 li {overflow: hidden;
     background-color: brown;
     display: inline;    
+    float: left;
     border-right:1px solid #bbb;
 }
 
