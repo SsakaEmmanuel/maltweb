@@ -61,7 +61,15 @@ caption{font-size: 25%;
 }
 
  img{border-radius: 15px;
+     
+-webkit-transition: width 2s, height 4s;
+    transition: width 2s, height 4s;
 }
+
+img:hover {width: 300px;
+          height: 300px;
+}
+
 
 .submit{text-decoration: none;
 } 
