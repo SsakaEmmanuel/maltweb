@@ -83,7 +83,6 @@ p{font-size: 18px;
 
 ul {
     list-style-type: none;
-    margin: 0;
     padding: 0;
     box-shadow: 2px 2px 2px;
     position: center;
@@ -91,6 +90,7 @@ ul {
 
 li {overflow: hidden;
     background-color: brown;
+    display: inline;    
     border-right:1px solid #bbb;
 }
 
