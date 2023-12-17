@@ -95,7 +95,7 @@ ul {
 
 li {display: inline;    
     float: left;
-    border-right:1px solid #bbb;
+    
 }
 
 li:last-child {
@@ -114,7 +114,7 @@ li a:hover:not(.active) {
     background-color: #111;
 }
 
-.active {
+.active1 {
     background-color: pink;
 }
 
