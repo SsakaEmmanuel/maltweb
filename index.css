@@ -76,13 +76,9 @@ p{font-size: 18px;
 
 }
 
-ul {font-family: comic sans ms;
-    font-size: 50%;
-    color: blue;  
-    list-style-type: none;
+ul {list-style-type: none;
     margin: 0;
     padding: 0;
-    box-shadow: 2px 2px 2px;
     position: fixed;
     top: 0;
     width: 100%;
@@ -92,16 +88,16 @@ ul {font-family: comic sans ms;
 
 li {display: inline;    
     float: left;
-    
+    font-family: comic sans ms;
+    font-size: 50%;    
+    color: blue;
 }
 
-li:last-child {
-    border-right: none;
-}
+li:last-child {border-right: none;}
 
 li a {
     display: block;
-    color: white;
+    color: blue;
     text-align: center;
     padding: 14px 16px;
     text-decoration: none;
