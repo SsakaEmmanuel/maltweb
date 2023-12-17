@@ -30,11 +30,6 @@ body{background-color: white;
 
   }
 
-label{font-family: comic sans ms;
-     font-size: 65%;
-     color: blue;
-}
-
 input{border-radius: 0.5px; border: 1px;
 
 }
@@ -81,7 +76,10 @@ p{font-size: 18px;
 
 }
 
-ul {
+ul {font-family: comic sans ms;
+    font-size: 65%;
+   box-sizing:border-box;
+    color: blue;  
     list-style-type: none;
     margin: 0;
     padding: 0;
