@@ -87,9 +87,12 @@ ul {
     padding: 0;
     box-shadow: 2px 2px 2px;
     position: fixed;
+    top: 0;
+    width: 100%;
+    overflow: hidden;
 }
 
-li {overflow: hidden;
+li {
     background-color: #f3f3f3;
     display: inline;    
     float: left;
