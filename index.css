@@ -92,7 +92,7 @@ ul {list-style-type: none;
     top: 0;
     width: 100%;
     background-color: #f3f3f3;   
-    overflow: hidden;
+    overflow: auto;
 }
 
 li {display: inline;    
