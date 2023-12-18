@@ -1,6 +1,8 @@
 body{background-color: white;
 
 }
+
+/*CUSTOMISED CONTAINERS ARE HERE*/
 .cont{background: grey;
       border: 10px;
       border-radius: 10px;
@@ -34,6 +36,8 @@ input{border-radius: 0.5px; border: 1px;
 
 }
 
+/*ALL HEADER STYLES ARE HERE*/
+
 h1{font-family: cooper black;
 	color: red;
   font-size: 40;
@@ -47,11 +51,16 @@ h3{background-color: pink;
   text-shadow: 2px 2px 5px black;
 
 }
+
+h5{font-size: 25px;}
+
 fieldset{border-width: 1px;
 	      border-style: blue;
 
 
 }
+
+/*IMAGE STYLES ARE HERE*/
 caption{font-size: 25%;
 }
 
@@ -69,9 +78,7 @@ img:hover {width: 300px;
 .submit{text-decoration: none;
 } 
 
-h5{font-size: 25px;
 
-}
 p{font-size: 18px;
 
 }
