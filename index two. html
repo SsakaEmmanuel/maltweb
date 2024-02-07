@@ -12,7 +12,7 @@
 
 <center>
 
-<!--navigation bars-->
+<!--button links-->
 
 <ul>
 <li><a class="active" href="schools.html">HOME
@@ -27,7 +27,6 @@ TR'S PAGE</a></li>
 Others</a></li>
 </ul>
 </center>
-<br/><hr/>
 
 </body>
 </html>
