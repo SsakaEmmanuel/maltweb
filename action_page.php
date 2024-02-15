@@ -4,7 +4,7 @@
 $servername = "localhost";
 $username = "username";
 $password = "password";
-$dbname = "mydatabase";
+$dbname = "database";
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -13,7 +13,7 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);
 }
-echo "Connected successfully"
+echo "Registered successfully"
 
 $_POST["first name","class", "age", "reg no", "contact", "gender", "term", "year"];
  ?>
