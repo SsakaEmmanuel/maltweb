@@ -1,36 +1,25 @@
-<!DOCTYPE html>
-<html>
-<head>
-	<title>myphpfile</title>
-</head>
-<body>
-<center><h1> SUBMITED FOAM </h1></center>
 
-Welcome:
-<? php echo $_POST["first name"]; ?> <br><br>
+
+<? php echo $_POST["first name"]; ?>
 
 
 Your class is:
-<? php echo $_POST["class"]; ?>     <br><br>
+<? php echo $_POST["class"]; ?>
 
 Your age is:
-<? php echo $_POST["age"]; ?>       <br><br>
+<? php echo $_POST["age"]; ?>
 
 Your registration number is:
-<? php echo $_POST["reg no"]; ?>    <br><br>
+<? php echo $_POST["reg no"]; ?>
 
 Your contact is:
-<? php echo $_POST["contact"]; ?>   <br><br>
+<? php echo $_POST["contact"]; ?>
 
 your gender is:
-<? php echo $_POST["gender"]; ?>    <br><br>
+<? php echo $_POST["gender"]; ?>
 
 Term:
-<? php echo $_POST["term"]; ?>      <br><br>
+<? php echo $_POST["term"]; ?>
 
 Year:
-<? php echo $_POST["year"]; ?>      <br><br>
-
-
-</body>
-</html>
+<? php echo $_POST["year"]; ?>
