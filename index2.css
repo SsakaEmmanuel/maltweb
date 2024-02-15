@@ -3,5 +3,5 @@ h4{
 } 
 a{text-decoration: none;
 }
-Body{background-image: url("photos/bg.jpeg")
+Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 }
