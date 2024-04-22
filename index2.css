@@ -9,6 +9,8 @@ Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 /* CSS styles for the slide show */
 .slideshow {
   position: relative;
+  Border: 2px black solid;
+  Padding: 5px 3px;
 }
 
 .slide {
