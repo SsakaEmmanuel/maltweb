@@ -43,3 +43,9 @@ Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 .prev:hover, .next:hover {
   background-color: #ccc;
 }
+
+.slide-p{
+          Border: 5px black solid;
+          Padding: 8px 4px;
+} 
+          
