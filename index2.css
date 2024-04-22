@@ -5,3 +5,39 @@ a{text-decoration: none;
 }
 Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 }
+
+/* CSS styles for the slide show */
+.slideshow {
+  position: relative;
+}
+
+.slide {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.prev, .next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.prev {
+  left: 10px;
+}
+
+.next {
+  right: 10px;
+}
+
+/* Add styles for active slide and navigation buttons */
+.active-slide {
+  display: block;
+}
+
+.prev:hover, .next:hover {
+  background-color: #ccc;
+}
