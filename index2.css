@@ -6,6 +6,8 @@ a{text-decoration: none;
 Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 }
 
+/*
+
 /* CSS styles for the slide show */
 .slideshow {
   position: relative;
@@ -47,5 +49,5 @@ Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 .slide-p{
           Border: 5px black solid;
           Padding: 8px 4px;
-} 
+} */
           
