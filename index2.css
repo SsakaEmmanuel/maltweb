@@ -1,7 +1,7 @@
 h4{
    text-align:center;
 } 
-a{text-decoration: none;
+ul, a{text-decoration: none;
 }
 Body{background-image: url("photos/bg.jpeg"); opacity : 78%;
 }
