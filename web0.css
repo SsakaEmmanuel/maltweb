@@ -1,0 +1,111 @@
+.d1, .d2, .d3, .d4, .d5, .d6, .d7
+{
+	border: 2px solid red;
+	padding: 10px;
+	margin: 10px;
+	width: 50%;
+	border-radius: 15px;
+
+
+}
+
+h1{
+	text-align: center;
+}
+
+#panel, .flip{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+}
+
+#panel{
+	display: none;
+}
+
+#panel2, .flip2{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+}
+
+#panel2{
+	display: none;
+}
+
+#panel3, .flip3{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+}
+
+#panel3{
+	display: none;
+}
+
+#panel4, .flip4{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+}
+
+#panel4{
+	display: none;
+}
+
+#panel5, .flip5{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+}
+
+#panel5{
+	display: none;
+}
+
+#panel6, .flip6{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+	
+}
+
+#panel6{
+	display: none;
+}
+
+#panel7, .flip7{
+	font-size: 16px;
+	padding: 10px;
+	text-align: center;
+	border: none;
+	margin: auto;
+	width: 50%;
+}
+
+#panel7{
+	display: none;
+}
+
+button{
+	border: none;
+	background-color: green;
+}
