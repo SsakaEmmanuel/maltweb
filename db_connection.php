@@ -1,16 +1,17 @@
-```php
 <?php
 $servername = "localhost";
 $username = "username";
-$password = "password";
-$dbname = "database";
+$password = "";
+$db_name = "database";
 
 // Create connection
-$conn = new mysqli($servername, $username, $password, $dbname);
+$conn = mysqli($servername, $username, $password, $db_name);
 
 // Check connection
-if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
-}
-echo "Connected successfully";
+if ($conn=TRUE){
+echo "Registerd successfully";
+} else{ echo "connection failed" 
+
+
+} 
 ?>
