@@ -1,0 +1,130 @@
+/*
+Template Name: Natu Leaf
+File: Layout CSS
+Author: TemplatesOnWeb
+Author URI: https://www.templateonweb.com/
+Licence: <a href="https://www.templateonweb.com/license">Website Template Licence</a>
+*/
+/*********************about****************/
+#prosp{
+  padding-top:40px;
+  padding-bottom:40px;
+  }
+.Prosp_1 h4:before {
+    display: inline-block;
+    width: 6%;
+    height: 2px;
+    background-color: #9fba1a;
+    vertical-align: middle;
+    margin-right: 1%;
+    content: "";
+}
+.Prosp_1 h4:after {
+    display: inline-block;
+    width: 6%;
+    height: 2px;
+    background-color: #9fba1a;
+    vertical-align: middle;
+    margin-left: 1%;
+    content: "";
+}
+.Prosp_2i h5 a:after {
+    display: inline-block;
+    width: 10%;
+    height: 2px;
+    background-color: #9fba1a;
+    vertical-align: middle;
+    margin-left: 2%;
+    content: "";
+}
+.Prosp_2{
+margin-top:30px; 
+ }
+.Prosp_2i img{
+ border-radius:30px 0px;
+ }
+ 
+#plan{
+padding-top:40px;
+padding-bottom:40px;  
+  }
+.plan_1i ul li{
+margin-top:8px; 
+ }
+.plan_1i ul li i{
+vertical-align:middle;
+margin-right:5px;
+ }
+.plan_1i1 span i{
+font-size:80px; 
+ }
+.plan_1i1i{
+border-top:1px solid #ddd;  
+border-bottom:1px solid #ddd;
+margin-top:15px;
+padding-top:15px;
+padding-bottom:25px;
+  }
+.plan_1i1i h1{
+font-size:60px;
+font-weight:bold;
+  }
+.plan_1i1 ul{
+margin-top:20px; 
+ }
+.plan_1i1 ul li{
+margin-top:8px; 
+ }
+.plan_1i1 ul li i{
+margin-right:5px;
+vertical-align:middle; 
+ }
+.plan_1i1 h4{
+margin-top:20px; 
+ }
+
+.plan_1i1 h4:after {
+    display: inline-block;
+    width: 10%;
+    height: 2px;
+    background-color: #ddd;
+    vertical-align: middle;
+    margin-left: 2%;
+    content: "";
+}
+.plan_1i1{
+ background:#8298151c;
+ padding:40px 30px;
+ border-radius:30px 0px; 
+ }
+.plan_1i1_o{
+ background:#9fba1a;
+ }
+/*********************about_end****************/
+
+@media screen and (max-width : 767px){
+#prosp{
+ text-align:center; 
+ }
+.Prosp_2i {
+margin-bottom:15px; 
+ }
+#plan{
+ text-align:center; 
+ }
+.plan_1i1 {
+margin-top:15px; 
+ }
+}
+
+@media (min-width:768px) and (max-width:991px) {
+.plan_1i1i h3{
+font-size:26px; 
+ }
+ }
+@media (min-width:992px) and (max-width:1200px) {
+
+  }
+@media (min-width:1201px) and (max-width:1240px) {
+
+ }

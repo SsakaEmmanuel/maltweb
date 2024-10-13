@@ -1,0 +1,96 @@
+/*
+Template Name: Natu Leaf
+File: Layout CSS
+Author: TemplatesOnWeb
+Author URI: https://www.templateonweb.com/
+Licence: <a href="https://www.templateonweb.com/license">Website Template Licence</a>
+*/
+/*********************services****************/
+#plan{
+  padding-top:40px;
+  padding-bottom:40px;
+  }
+.plan_1_i{
+  padding:20px 15px;
+  background:#8298151c;
+  }
+#connect{
+padding-top:0!important; 
+ }
+#about_page_o{
+padding-top:40px;
+padding-bottom:20px;
+background:#8298151c;
+ } 
+.about_page_l h3{
+ border-bottom:5px solid #9fba1a;
+ display:inline-block;
+ padding-bottom:10px;
+ margin-bottom:15px;
+ }
+.environment_2i a {
+ background-color: #9fba1a;  
+}
+.environment_2i{
+ padding:20px 20px 20px 20px;
+ border-left:1px solid #9fba1a45;
+ border-right:1px solid #9fba1a45;
+ border-bottom:1px solid #9fba1a45;
+ }
+.about_page_r h3{
+ border-bottom:5px solid #9fba1a;
+ display:inline-block;
+ padding-bottom:10px;
+ margin-bottom:30px;
+ }
+ 
+.panel-heading span {
+	margin-top: -20px;
+	font-size: 15px;
+}
+.about_page_r  .panel-heading{
+ background:#9fba1a;
+ color:#fff;
+ padding:20px 15px;
+ }
+.about_page_r  .panel-heading h5{
+ font-size:18px;
+ font-weight:bold;
+ }
+.about_page_r  .panel-body{
+ font-size:16px;
+ }
+.panel-success {
+    border:none;
+	background:#fff;
+}
+
+.pager li>a:hover, .pager li>a:focus {
+    text-decoration: none;
+    background-color: #8298151c;
+}
+/*********************services_end****************/
+
+@media screen and (max-width : 767px){
+.plan_1_i{
+margin-top:10px; 
+ }
+#about_page_o{
+text-align:center; 
+ }
+.about_page_r .panel-heading h5{
+text-align:left; 
+ }
+}
+
+@media (min-width:768px) and (max-width:991px) {
+.environment_2i ul li{
+margin-bottom:5px; 
+ }
+ }
+@media (min-width:992px) and (max-width:1200px) {
+
+  }
+@media (min-width:1201px) and (max-width:1240px) {
+
+ }

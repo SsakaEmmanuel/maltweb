@@ -1,0 +1,72 @@
+/*
+Template Name: Natu Leaf
+File: Layout CSS
+Author: TemplatesOnWeb
+Author URI: https://www.templateonweb.com/
+Licence: <a href="https://www.templateonweb.com/license">Website Template Licence</a>
+*/
+/*********************faq****************/
+#faq{
+padding-top:40px;
+padding-bottom:40px; 
+ }
+.faq_1l .nav_1 li a {
+background:#8298151c;
+padding: 10px 20px;
+display: block;
+margin-bottom:15px;
+}
+.faq_1l .nav_1 li a:hover {
+background:#9fba1a;
+color:#fff;
+}
+.nav_1>li.active>a, .nav_1>li.active>a:hover, .nav_1>li.active>a:focus {
+background:#9fba1a;
+color:#fff;
+}
+#faq_o{
+padding-top:40px;
+padding-bottom:40px; 
+background:#8298151c;
+ }
+.faq_o2{
+margin-top:30px; 
+ }
+.faq_o2il .form-control{
+height:50px;
+border-radius:0;
+box-shadow:none;
+border-color:#9fba1a45;
+font-size:16px; 
+ }
+.faq_o2il .form_1{
+height:120px;
+ }
+.faq_o2i{
+margin-top:15px; 
+ }
+/*********************faq_end****************/
+
+
+
+@media screen and (max-width : 767px){
+#faq{
+text-align:center;
+ }
+#faq_o{
+text-align:center;
+ }
+.faq_o2il{
+margin-top:10px; 
+ }
+}
+
+@media (min-width:768px) and (max-width:991px) {
+
+ }
+@media (min-width:992px) and (max-width:1200px) {
+
+  }
+@media (min-width:1201px) and (max-width:1240px) {
+
+ }

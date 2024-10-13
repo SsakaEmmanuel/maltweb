@@ -1,0 +1,44 @@
+/*
+Template Name: Natu Leaf
+File: Layout CSS
+Author: TemplatesOnWeb
+Author URI: https://www.templateonweb.com/
+Licence: <a href="https://www.templateonweb.com/license">Website Template Licence</a>
+*/
+/*********************contact****************/
+#contact{
+padding-top:40px;
+padding-bottom:40px; 
+border-bottom:1px solid #9fba1a45; 
+ }
+.contact_1{
+ margin-top:30px;
+ }
+.contact_2l h4{
+line-height:1.4em; 
+ }
+.contact_2l ul li a{
+background:#9fba1a;
+ }
+/*********************contact_end****************/
+
+
+
+@media screen and (max-width : 767px){
+#contact{
+text-align:center; 
+ }
+.contact_2r {
+margin-top:15px; 
+ }
+}
+
+@media (min-width:768px) and (max-width:991px) {
+
+ }
+@media (min-width:992px) and (max-width:1200px) {
+
+  }
+@media (min-width:1201px) and (max-width:1240px) {
+
+ }
