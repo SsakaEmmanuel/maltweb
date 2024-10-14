@@ -79,6 +79,7 @@ background:#0000008c;
 /********************************/
 .fade-carousel .slides .slide-1, 
 .fade-carousel .slides .slide-2,
+.fade-carousel .slides .slide-3 {
   min-height: 600px;
   background-size: cover;
   background-position: center;
@@ -744,7 +745,3 @@ padding:10px;
  overflow:hidden; 
   }
  }
-   .green-icon {
-            color: green; /* Set the icon color to green */
-            font-size: 24px; /* Optional: Set the icon size */
-        }
