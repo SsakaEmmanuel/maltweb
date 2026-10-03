@@ -40,13 +40,18 @@ async function createProfile(e){
  $('#msg').textContent=error?error.message:'✓ Profile submitted online for admin review.'; if(!error)e.target.reset();
 }
 async function admin(){
- const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){$('#adminMsg').textContent='Please log in first.';return}
+ const {data:{user}}=await maltSupabase.auth.getUser();
+ if(!user){$('#adminMsg').textContent='Please log in first.';return}
  const {data,error}=await maltSupabase.rpc('malt_is_admin');
  if(error||!data){$('#adminMsg').textContent='Admin access is not enabled for this account yet.';return}
- $('#adminMsg').textContent='Admin access granted.';
+ $('#adminMsg').textContent='Admin access granted. Loading submissions…';
  const r=await maltSupabase.from('listings').select('*').in('status',['pending','active','rejected']).order('created_at',{ascending:false});
- if(r.error){$('#adminListings').innerHTML='<div class="card">'+esc(r.error.message)+'</div>';return}
- $('#adminListings').innerHTML=(r.data||[]).map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><p>${esc(x.description)}</p><div class="actions"><button onclick="setStatus('${x.id}','active')">Approve</button><button class="secondary" onclick="setStatus('${x.id}','rejected')">Reject</button></div></article>`).join('')||'<div class="card">No listings.</div>';
+ if(r.error){$('#adminMsg').textContent='Admin access granted, but listings could not be loaded.';$('#adminListings').innerHTML='<div class="card"><h3>Listings could not be loaded</h3><p>'+esc(r.error.message)+'</p><p class="muted">Run the v15 admin RLS migration in Supabase SQL Editor, then refresh this page.</p></div>';return}
+ const rows=r.data||[];
+ rows.sort((a,b)=>({pending:0,active:1,rejected:2}[a.status]??9)-({pending:0,active:1,rejected:2}[b.status]??9) || new Date(b.created_at)-new Date(a.created_at));
+ const pending=rows.filter(x=>x.status==='pending').length;
+ $('#adminMsg').textContent=`Admin access granted. ${pending} pending submission${pending===1?'':'s'}.`;
+ $('#adminListings').innerHTML=rows.map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><p>${esc(x.description)}</p>${x.phone?`<p><strong>Phone:</strong> ${esc(x.phone)}</p>`:''}${x.website?`<p><a href="${esc(x.website)}" target="_blank" rel="noopener">Website →</a></p>`:''}<div class="actions">${x.status==='pending'?`<button onclick="setStatus('${x.id}','active')">✓ Approve</button><button class="secondary" onclick="setStatus('${x.id}','rejected')">✕ Reject</button>`:x.status==='active'?`<button class="secondary" onclick="setStatus('${x.id}','rejected')">Reject</button>`:`<button onclick="setStatus('${x.id}','active')">Approve again</button>`}</div></article>`).join('')||'<div class="card"><h3>No listings yet.</h3><p>New profiles will appear here after submission.</p></div>';
 }
 async function setStatus(id,status){
  const {data,error}=await maltSupabase.rpc('malt_set_listing_status',{p_listing_id:id,p_status:status});
