@@ -1,294 +1,74 @@
-const $ = (selector) => document.querySelector(selector);
+const $=s=>document.querySelector(s);
+const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const online=()=>!!window.maltSupabase;
 
-function esc(value) {
-  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[char]));
+async function loadData(){
+ if(!online())return;
+ const [l,e,o]=await Promise.all([
+  maltSupabase.from('listings').select('*').eq('status','active').order('verified',{ascending:false}).order('created_at',{ascending:false}),
+  maltSupabase.from('events').select('*').eq('status','active').order('date',{ascending:true}),
+  maltSupabase.from('opportunities').select('*').eq('status','active').order('created_at',{ascending:false})
+ ]);
+ if(!l.error)LISTINGS=l.data||[]; if(!e.error)EVENTS=e.data||[]; if(!o.error)OPPORTUNITIES=o.data||[];
 }
-
-const online = () => !!window.maltSupabase;
-
-async function loadData() {
-  if (!online()) return;
-
-  try {
-    const [listingsResult, eventsResult, opportunitiesResult] = await Promise.all([
-      maltSupabase
-        .from('listings')
-        .select('*')
-        .eq('status', 'active')
-        .order('verified', { ascending: false })
-        .order('created_at', { ascending: false }),
-      maltSupabase
-        .from('events')
-        .select('*')
-        .eq('status', 'active')
-        .order('date', { ascending: true }),
-      maltSupabase
-        .from('opportunities')
-        .select('*')
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-    ]);
-
-    if (!listingsResult.error) LISTINGS = listingsResult.data || [];
-    if (!eventsResult.error) EVENTS = eventsResult.data || [];
-    if (!opportunitiesResult.error) OPPORTUNITIES = opportunitiesResult.data || [];
-
-    return {
-      listingsError: listingsResult.error,
-      eventsError: eventsResult.error,
-      opportunitiesError: opportunitiesResult.error
-    };
-  } catch (error) {
-    console.warn('MALTWEB online data error:', error);
-    return { connectionError: error };
-  }
+function card(x){return `<article class="card"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><p>${esc(x.description)}</p><a class="button" href="profile.html?id=${encodeURIComponent(x.id)}">View profile</a></article>`}
+function render(){
+ let p=new URLSearchParams(location.search);
+ let q=($('#q')?.value||p.get('q')||'').toLowerCase(), loc=($('#loc')?.value||p.get('location')||'').toLowerCase(), cat=$('#cat')?.value||p.get('category')||'', type=$('#type')?.value||'';
+ let a=LISTINGS.filter(x=>(!q||(x.name+' '+x.category+' '+x.description+' '+x.type).toLowerCase().includes(q))&&(!loc||String(x.location||'').toLowerCase().includes(loc))&&(!cat||x.category===cat)&&(!type||x.type===type));
+ if($('#count'))$('#count').textContent=`${a.length} result${a.length===1?'':'s'} found`;
+ if($('#results'))$('#results').innerHTML=a.map(card).join('')||'<div class="card"><h3>No active listings yet.</h3><p>Approved profiles will appear here.</p></div>';
 }
-
-function card(item) {
-  return `<article class="card">
-    <span class="verify">${item.verified ? '✓ Verified' : 'Local listing'}</span>
-    <h3>${esc(item.name)}</h3>
-    <small>${esc(item.category)} • ${esc(item.location)}</small>
-    <p>${esc(item.description)}</p>
-    <a class="button" href="profile.html?id=${encodeURIComponent(item.id)}">View profile</a>
-  </article>`;
+async function showProfile(){
+ const id=new URLSearchParams(location.search).get('id'); const x=LISTINGS.find(a=>String(a.id)===String(id));
+ if(!x){$('#profile').innerHTML='<div class="card"><h2>Profile not found</h2><p>This listing may still be pending review.</p></div>';return}
+ $('#profile').innerHTML=`<div class="profile card"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><h1>${esc(x.name)}</h1><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><h2>About</h2><p>${esc(x.description)}</p><h2>Contact</h2><p>${esc(x.phone||'Contact details available soon.')}</p>${x.website?`<p><a href="${esc(x.website)}" target="_blank" rel="noopener">Visit website →</a></p>`:''}<a class="button" href="discover.html">← Back to Discover</a></div>`;
 }
-
-function render() {
-  const params = new URLSearchParams(location.search);
-  const query = ($('#q')?.value || params.get('q') || '').toLowerCase();
-  const locationFilter = ($('#loc')?.value || params.get('location') || '').toLowerCase();
-  const category = $('#cat')?.value || '';
-  const type = $('#type')?.value || '';
-
-  const results = LISTINGS.filter((item) =>
-    (!query || `${item.name} ${item.category} ${item.description}`.toLowerCase().includes(query)) &&
-    (!locationFilter || String(item.location || '').toLowerCase().includes(locationFilter)) &&
-    (!category || item.category === category) &&
-    (!type || item.type === type)
-  );
-
-  if ($('#count')) {
-    $('#count').textContent = `${results.length} result${results.length === 1 ? '' : 's'} found`;
-  }
-
-  if ($('#results')) {
-    $('#results').innerHTML = results.map(card).join('') || '<div class="card">No matches found.</div>';
-  }
+async function login(e){e.preventDefault();const {error}=await maltSupabase.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});if(error){$('#msg').textContent=error.message;return}location='dashboard.html'}
+async function register(e){e.preventDefault();const {data,error}=await maltSupabase.auth.signUp({email:$('#email').value,password:$('#password').value,options:{data:{full_name:$('#name').value,role:$('#role').value}}});if(error){$('#msg').textContent=error.message;return}$('#msg').textContent=data.session?'Account created.':'Account created. You can now log in.';setTimeout(()=>location='login.html',700)}
+async function dashboard(){
+ const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
+ $('#hello').textContent='Hello, '+(user.user_metadata?.full_name||user.email.split('@')[0])+' 👋';
+ const {data,error}=await maltSupabase.from('listings').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});
+ if(error){$('#myListings').innerHTML='<div class="card">'+esc(error.message)+'</div>';return}
+ $('#myListings').innerHTML=(data||[]).map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.location)}</p></article>`).join('')||'<div class="card">No submissions yet.</div>';
 }
-
-function events() {
-  const query = ($('#eq')?.value || '').toLowerCase();
-  const results = EVENTS.filter((item) =>
-    `${item.name} ${item.description} ${item.location}`.toLowerCase().includes(query)
-  );
-
-  if ($('#events')) {
-    $('#events').innerHTML = results.map((item) => `
-      <article class="card">
-        <small>${esc(item.date || '')}</small>
-        <h3>${esc(item.name)}</h3>
-        <p>${esc(item.category || 'Event')} • ${esc(item.location)}</p>
-        <p>${esc(item.description)}</p>
-      </article>
-    `).join('') || '<div class="card">No events found.</div>';
-  }
+async function createProfile(e){
+ e.preventDefault(); const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
+ const payload={name:$('#pn').value,category:$('#pc').value,type:$('#pt').value,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,verified:false,status:'pending',owner_id:user.id};
+ const {error}=await maltSupabase.from('listings').insert(payload);
+ $('#msg').textContent=error?error.message:'✓ Profile submitted online for admin review.'; if(!error)e.target.reset();
 }
-
-function opps() {
-  const query = ($('#oq')?.value || '').toLowerCase();
-  const results = OPPORTUNITIES.filter((item) =>
-    `${item.name} ${item.description} ${item.location}`.toLowerCase().includes(query)
-  );
-
-  if ($('#opps')) {
-    $('#opps').innerHTML = results.map((item) => `
-      <article class="card">
-        <span class="verify">${esc(item.type)}</span>
-        <h3>${esc(item.name)}</h3>
-        <p>${esc(item.location)}</p>
-        <p>${esc(item.description)}</p>
-      </article>
-    `).join('') || '<div class="card">No opportunities found.</div>';
-  }
+async function admin(){
+ const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){$('#adminMsg').textContent='Please log in first.';return}
+ const {data,error}=await maltSupabase.rpc('malt_is_admin');
+ if(error||!data){$('#adminMsg').textContent='Admin access is not enabled for this account yet.';return}
+ $('#adminMsg').textContent='Admin access granted.';
+ const r=await maltSupabase.from('listings').select('*').in('status',['pending','active','rejected']).order('created_at',{ascending:false});
+ if(r.error){$('#adminListings').innerHTML='<div class="card">'+esc(r.error.message)+'</div>';return}
+ $('#adminListings').innerHTML=(r.data||[]).map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><p>${esc(x.description)}</p><div class="actions"><button onclick="setStatus('${x.id}','active')">Approve</button><button class="secondary" onclick="setStatus('${x.id}','rejected')">Reject</button></div></article>`).join('')||'<div class="card">No listings.</div>';
 }
-
-async function profile() {
-  const id = new URLSearchParams(location.search).get('id');
-  const item = LISTINGS.find((entry) => String(entry.id) === String(id)) || LISTINGS[0];
-  if (!item || !$('#profile')) return;
-
-  $('#profile').innerHTML = `<div class="card">
-    <h1>${esc(item.name)}</h1>
-    <span class="verify">${item.verified ? '✓ Verified' : 'Local listing'}</span>
-    <p>${esc(item.category)} • ${esc(item.type)} • ${esc(item.location)}</p>
-    <h2>About</h2>
-    <p>${esc(item.description)}</p>
-    <h2>Contact</h2>
-    <p>${esc(item.phone || 'Contact details available soon.')}</p>
-    ${item.website ? `<p><a href="${esc(item.website)}" target="_blank" rel="noopener">Visit website</a></p>` : ''}
-  </div>`;
+async function setStatus(id,status){
+ const {data,error}=await maltSupabase.rpc('malt_set_listing_status',{p_listing_id:id,p_status:status});
+ if(error||!data){alert(error?.message||'Update failed');return} location.reload();
 }
+async function events(){let q=($('#eq')?.value||'').toLowerCase();$('#events').innerHTML=EVENTS.filter(x=>(x.name+' '+x.description+' '+x.location).toLowerCase().includes(q)).map(x=>`<article class="card"><span class="pill">${esc(x.date||'')}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category||'Event')} · ${esc(x.location)}</p><p>${esc(x.description)}</p></article>`).join('')||'<div class="card">No events found.</div>'}
+async function opps(){let q=($('#oq')?.value||'').toLowerCase();$('#opps').innerHTML=OPPORTUNITIES.filter(x=>(x.name+' '+x.description+' '+x.location).toLowerCase().includes(q)).map(x=>`<article class="card"><span class="pill">${esc(x.type)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.location)}</p><p>${esc(x.description)}</p></article>`).join('')||'<div class="card">No opportunities found.</div>'}
 
-async function login(event) {
-  event.preventDefault();
-  if (!online()) {
-    alert('MALTWEB could not connect to Supabase. Please refresh the page.');
-    return;
-  }
+async function init(){
 
-  const email = $('#email').value.trim();
-  const password = $('#password').value;
-  const { error } = await maltSupabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  location = 'dashboard.html';
+ if(!online())return;
+ await loadData();
+ if($('#categories'))$('#categories').innerHTML=CATEGORIES.map(x=>`<a class="cat" href="discover.html?category=${encodeURIComponent(x)}"><b>✦</b>${esc(x)}<small>Discover local options</small></a>`).join('');
+ if($('#cat')){CATEGORIES.forEach(x=>$('#cat').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));render();$('#searchBtn')?.addEventListener('click',render);['q','loc','cat','type'].forEach(id=>$('#'+id)?.addEventListener('input',render))}
+ if($('#profile'))showProfile();
+ if($('#createForm')){CATEGORIES.forEach(x=>$('#pc').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));$('#createForm').addEventListener('submit',createProfile)}
+ if($('#loginForm'))$('#loginForm').addEventListener('submit',login);
+ if($('#registerForm'))$('#registerForm').addEventListener('submit',register);
+ if($('#hello'))dashboard();
+ if($('#logout'))$('#logout').addEventListener('click',async()=>{await maltSupabase.auth.signOut();location='login.html'});
+ if($('#adminListings'))admin();
+ if($('#events')){$('#eq').addEventListener('input',events);events()}
+ if($('#opps')){$('#oq').addEventListener('input',opps);opps()}
 }
-
-async function register(event) {
-  event.preventDefault();
-  if (!online()) {
-    alert('MALTWEB could not connect to Supabase. Please refresh the page.');
-    return;
-  }
-
-  const name = $('#name').value.trim();
-  const email = $('#email').value.trim();
-  const password = $('#password').value;
-  const role = $('#role').value;
-
-  const { data, error } = await maltSupabase.auth.signUp({
-    email,
-    password,
-    options: { data: { full_name: name, role } }
-  });
-
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  if (data.user) {
-    alert('Account created. Check your email if confirmation is enabled in Supabase.');
-  }
-  location = 'login.html';
-}
-
-async function dashboard() {
-  if (!online()) return;
-
-  const { data: { user } } = await maltSupabase.auth.getUser();
-  if (!user) {
-    location = 'login.html';
-    return;
-  }
-
-  if ($('#hello')) {
-    $('#hello').textContent = `Hello, ${user.user_metadata?.full_name || user.email.split('@')[0]} 👋`;
-  }
-
-  if ($('#saved')) {
-    $('#saved').innerHTML = '<div class="card">Your online account is connected. Saved profiles can be added in the next MALTWEB module.</div>';
-  }
-}
-
-async function create(event) {
-  event.preventDefault();
-  if (!online()) {
-    alert('MALTWEB could not connect to Supabase. Please refresh the page.');
-    return;
-  }
-
-  const { data: { user } } = await maltSupabase.auth.getUser();
-  if (!user) {
-    location = 'login.html';
-    return;
-  }
-
-  const payload = {
-    name: $('#pn').value.trim(),
-    category: $('#pc').value,
-    location: $('#pl').value.trim(),
-    description: $('#pd').value.trim(),
-    phone: $('#pp')?.value.trim() || null,
-    type: 'Service Provider',
-    verified: false,
-    status: 'pending',
-    owner_id: user.id
-  };
-
-  const { error } = await maltSupabase.from('listings').insert(payload);
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  if ($('#msg')) $('#msg').textContent = '✓ Profile submitted online for admin review.';
-  event.target.reset();
-}
-
-async function checkConnection() {
-  const status = $('#onlineStatus');
-  if (!status) return;
-
-  status.textContent = 'Connecting...';
-
-  if (!online()) {
-    status.textContent = 'Connection unavailable';
-    return;
-  }
-
-  try {
-    const { error } = await maltSupabase.from('listings').select('id', { count: 'exact', head: true });
-    if (error) throw error;
-    status.textContent = '✓ Online database connected';
-  } catch (error) {
-    console.error('MALTWEB Supabase connection error:', error);
-    status.textContent = '⚠ Database connection error';
-  }
-}
-
-async function init() {
-  await checkConnection();
-  await loadData();
-
-  if ($('#categories')) {
-    $('#categories').innerHTML = CATEGORIES.map((category) =>
-      `<a class="cat" href="discover.html?category=${encodeURIComponent(category)}"><b>✦</b>${esc(category)}<small>Discover local options</small></a>`
-    ).join('');
-  }
-
-  if ($('#cat')) {
-    CATEGORIES.forEach((category) => {
-      $('#cat').insertAdjacentHTML('beforeend', `<option>${esc(category)}</option>`);
-    });
-
-    const params = new URLSearchParams(location.search);
-    if (params.get('category')) $('#cat').value = params.get('category');
-    render();
-  }
-
-  if ($('#profile')) profile();
-  if ($('#events')) events();
-  if ($('#opps')) opps();
-
-  if ($('#pc')) {
-    CATEGORIES.forEach((category) => {
-      $('#pc').insertAdjacentHTML('beforeend', `<option>${esc(category)}</option>`);
-    });
-  }
-
-  if ($('#hello')) dashboard();
-}
-
 init();
