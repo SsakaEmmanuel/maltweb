@@ -67,6 +67,8 @@ async function dashboard(){
  if($('#roleTitle'))$('#roleTitle').textContent=role==='admin'?'Administrator dashboard':role==='user'?'Personal dashboard':roleLabel(role)+' dashboard';
  const intro={user:'Discover local options, save favourites, review profiles and contact providers.',business:'Manage your business presence on MALTWEB and publish your business profile.',service_provider:'Showcase your services, receive contacts and keep your service profile current.',organization:'Publish your organization and connect with people in your local community.',admin:'Review listings and manage the MALTWEB platform.'}[role]||'Manage your MALTWEB account.';
  if($('#roleIntro'))$('#roleIntro').textContent=intro;
+ const adminNav=$('#adminNav');
+ if(adminNav) adminNav.hidden=role!=='admin';
  if($('#roleActions')){
    const links=[];
    if(role!=='admin')links.push('<a class="button" href="discover.html">Discover local options</a>');
