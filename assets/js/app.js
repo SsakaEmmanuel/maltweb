@@ -51,17 +51,40 @@ async function showProfile(){
  $('#profile').innerHTML=`<div class="profile card"><div class="profile-head"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${saved?'saved':''}" onclick="toggleSaved('${x.id}');showProfile()">${saved?'♥ Saved':'♡ Save'}</button></div><h1>${esc(x.name)}</h1><p class="profile-meta">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><div class="rating-summary"><strong>★ ${avg}</strong> <span class="muted">(${reviews.length} review${reviews.length===1?'':'s'})</span></div><div class="profile-section"><h2>About</h2><p>${esc(x.description)}</p></div><div class="profile-section"><h2>Contact</h2><p class="contact-number">${esc(x.phone||'Contact details available soon.')}</p><div class="actions">${x.phone?`<a class="button" href="tel:${esc(x.phone)}">☎ Call</a><a class="button whatsapp" href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer">WhatsApp</a>`:''}${site}</div></div><div class="profile-section"><h2>Reviews</h2><form class="review-form" onsubmit="event.preventDefault();submitReview('${x.id}')"><select id="reviewRating" required><option value="">Your rating</option><option value="5">5 — Excellent</option><option value="4">4 — Very good</option><option value="3">3 — Good</option><option value="2">2 — Fair</option><option value="1">1 — Poor</option></select><textarea id="reviewText" placeholder="Write a review (optional)"></textarea><button>Submit review</button><p id="reviewMsg" class="muted"></p></form><div class="reviews">${reviewList}</div></div><p class="muted">Share this profile with someone who needs this service.</p><div class="actions"><button class="secondary" onclick="navigator.clipboard?.writeText(location.href).then(()=>this.textContent='Link copied ✓')">Copy profile link</button><a class="button secondary" href="discover.html">← Back to Discover</a></div></div>`;
 }
 async function login(e){e.preventDefault();const {error}=await maltSupabase.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});if(error){$('#msg').textContent=error.message;return}location='dashboard.html'}
-async function register(e){e.preventDefault();const {data,error}=await maltSupabase.auth.signUp({email:$('#email').value,password:$('#password').value,options:{data:{full_name:$('#name').value,role:$('#role').value}}});if(error){$('#msg').textContent=error.message;return}$('#msg').textContent=data.session?'Account created.':'Account created. You can now log in.';setTimeout(()=>location='login.html',700)}
+async function register(e){e.preventDefault();const role=$('#role').value||'user';const {data,error}=await maltSupabase.auth.signUp({email:$('#email').value,password:$('#password').value,options:{data:{full_name:$('#name').value,role}}});if(error){$('#msg').textContent=error.message;return}if(data.user){const r=await maltSupabase.from('malt_user_roles').upsert({user_id:data.user.id,role},{onConflict:'user_id'});if(r.error){$('#msg').textContent='Account created, but role setup failed: '+r.error.message;return;}}$('#msg').textContent=data.session?'Account created.':'Account created. You can now log in.';setTimeout(()=>location='login.html',700)}
+async function getAccountRole(user){
+ const adminRes=await maltSupabase.rpc('malt_is_admin');
+ if(!adminRes.error&&adminRes.data)return 'admin';
+ const r=await maltSupabase.rpc('malt_get_my_role');
+ return (!r.error&&r.data)||user.user_metadata?.role||'user';
+}
+function roleLabel(role){return ({user:'Ordinary User',business:'Business',service_provider:'Service Provider',organization:'Organization',admin:'Administrator'})[role]||'Ordinary User'}
 async function dashboard(){
  const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
+ const role=await getAccountRole(user);
  $('#hello').textContent='Hello, '+(user.user_metadata?.full_name||user.email.split('@')[0])+' 👋';
+ if($('#rolePill'))$('#rolePill').textContent=roleLabel(role);
+ if($('#roleTitle'))$('#roleTitle').textContent=role==='admin'?'Administrator dashboard':role==='user'?'Personal dashboard':roleLabel(role)+' dashboard';
+ const intro={user:'Discover local options, save favourites, review profiles and contact providers.',business:'Manage your business presence on MALTWEB and publish your business profile.',service_provider:'Showcase your services, receive contacts and keep your service profile current.',organization:'Publish your organization and connect with people in your local community.',admin:'Review listings and manage the MALTWEB platform.'}[role]||'Manage your MALTWEB account.';
+ if($('#roleIntro'))$('#roleIntro').textContent=intro;
+ if($('#roleActions')){
+   const links=[];
+   if(role!=='admin')links.push('<a class="button" href="discover.html">Discover local options</a>');
+   if(role!=='user'&&role!=='admin')links.push('<a class="button" href="create-profile.html">+ Create '+esc(roleLabel(role))+' profile</a>');
+   if(role==='admin')links.push('<a class="button" href="admin.html">Open admin review</a>');
+   if(role==='user')links.push('<a class="button" href="create-profile.html">+ Create a profile</a>');
+   $('#roleActions').innerHTML=links.join('');
+ }
  const {data,error}=await maltSupabase.from('listings').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});
  if(error){$('#myListings').innerHTML='<div class="card">'+esc(error.message)+'</div>';return}
- $('#myListings').innerHTML=(data||[]).map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.location)}</p></article>`).join('')||'<div class="card">No submissions yet.</div>';
+ $('#myListings').innerHTML=(data||[]).map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p></article>`).join('')||'<div class="card">No submissions yet.</div>';
 }
 async function createProfile(e){
  e.preventDefault(); const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
- const payload={name:$('#pn').value,category:$('#pc').value,type:$('#pt').value,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,verified:false,status:'pending',owner_id:user.id};
+ const role=await getAccountRole(user); if(role==='admin'){ $('#msg').textContent='Administrators manage listings from the Admin panel.'; return; }
+ const allowed={user:['Service Provider','Business','Organization','Community'],business:['Business'],service_provider:['Service Provider'],organization:['Organization']}[role]||['Service Provider'];
+ const selected=$('#pt').value; if(!allowed.includes(selected)){ $('#msg').textContent='Your '+roleLabel(role)+' account can only publish: '+allowed.join(', ')+'.'; return; }
+ const payload={name:$('#pn').value,category:$('#pc').value,type:selected,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,verified:false,status:'pending',owner_id:user.id};
  const {error}=await maltSupabase.from('listings').insert(payload);
  $('#msg').textContent=error?error.message:'✓ Profile submitted online for admin review.'; if(!error)e.target.reset();
 }
@@ -86,6 +109,14 @@ async function setStatus(id,status){
 async function events(){let q=($('#eq')?.value||'').toLowerCase();$('#events').innerHTML=EVENTS.filter(x=>(x.name+' '+x.description+' '+x.location).toLowerCase().includes(q)).map(x=>`<article class="card"><span class="pill">${esc(x.date||'')}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category||'Event')} · ${esc(x.location)}</p><p>${esc(x.description)}</p></article>`).join('')||'<div class="card">No events found.</div>'}
 async function opps(){let q=($('#oq')?.value||'').toLowerCase();$('#opps').innerHTML=OPPORTUNITIES.filter(x=>(x.name+' '+x.description+' '+x.location).toLowerCase().includes(q)).map(x=>`<article class="card"><span class="pill">${esc(x.type)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.location)}</p><p>${esc(x.description)}</p></article>`).join('')||'<div class="card">No opportunities found.</div>'}
 
+async function prepareCreateProfile(){
+ const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
+ const role=await getAccountRole(user), select=$('#pt');
+ const allowed={user:['Service Provider','Business','Organization','Community'],business:['Business'],service_provider:['Service Provider'],organization:['Organization']}[role]||['Service Provider'];
+ if($('#profileRole'))$('#profileRole').textContent=roleLabel(role);
+ if($('#profileRoleMsg'))$('#profileRoleMsg').textContent='This account can publish: '+allowed.join(', ')+'.';
+ if(select){select.innerHTML=allowed.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');}
+}
 async function init(){
 
  if(!online())return;
@@ -93,7 +124,7 @@ async function init(){
  if($('#categories'))$('#categories').innerHTML=CATEGORIES.map(x=>`<a class="cat" href="discover.html?category=${encodeURIComponent(x)}"><b>✦</b>${esc(x)}<small>Discover local options</small></a>`).join('');
  if($('#cat')){CATEGORIES.forEach(x=>$('#cat').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));render();$('#searchBtn')?.addEventListener('click',render);['q','loc','cat','type'].forEach(id=>$('#'+id)?.addEventListener('input',render))}
  if($('#profile'))showProfile();
- if($('#createForm')){CATEGORIES.forEach(x=>$('#pc').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));$('#createForm').addEventListener('submit',createProfile)}
+ if($('#createForm')){CATEGORIES.forEach(x=>$('#pc').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));$('#createForm').addEventListener('submit',createProfile);prepareCreateProfile()}
  if($('#loginForm'))$('#loginForm').addEventListener('submit',login);
  if($('#registerForm'))$('#registerForm').addEventListener('submit',register);
  if($('#hello'))dashboard();
