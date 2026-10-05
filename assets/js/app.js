@@ -39,6 +39,10 @@ function stars(n){return '★'.repeat(Number(n)||0)+'☆'.repeat(5-(Number(n)||0
 async function submitReview(listingId){
  const {data:{user}}=await maltSupabase.auth.getUser();
  if(!user){location='login.html';return;}
+ const role=await getAccountRole(user);
+ if(role!=='user'){$('#reviewMsg').textContent='Only Ordinary Users can give ratings and reviews.';return;}
+ const listing=LISTINGS.find(x=>String(x.id)===String(listingId));
+ if(listing?.owner_id===user.id){$('#reviewMsg').textContent='You cannot review your own listing.';return;}
  const rating=Number($('#reviewRating')?.value||0), text=$('#reviewText')?.value.trim()||'';
  if(!rating||rating<1||rating>5){$('#reviewMsg').textContent='Please choose a rating from 1 to 5.';return;}
  const {error}=await maltSupabase.from('reviews').upsert({listing_id:listingId,user_id:user.id,rating,review:text||null},{onConflict:'listing_id,user_id'});
@@ -62,8 +66,16 @@ async function showProfile(){
  if(x.website){let u=String(x.website).trim(); if(!/^https?:\/\//i.test(u))u='https://'+u; site=`<a class="button secondary" href="${esc(u)}" target="_blank" rel="noopener noreferrer">Visit website ↗</a>`}
  const reviews=await loadReviews(x.id);
  const avg=reviews.length?(reviews.reduce((sum,r)=>sum+Number(r.rating||0),0)/reviews.length).toFixed(1):'0.0';
- const reviewList=reviews.length?reviews.map(r=>`<article class="review"><div><strong>${stars(r.rating)}</strong> <span class="muted">${new Date(r.created_at).toLocaleDateString()}</span></div><p>${esc(r.review||'No written comment.')}</p></article>`).join(''):'<p class="muted">No reviews yet. Be the first to review this profile.</p>';
- $('#profile').innerHTML=`<div class="profile card"><div class="profile-head"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${saved?'saved':''}" onclick="toggleSaved('${x.id}');showProfile()">${saved?'♥ Saved':'♡ Save'}</button></div><h1>${esc(x.name)}</h1><p class="profile-meta">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><div class="rating-summary"><strong>★ ${avg}</strong> <span class="muted">(${reviews.length} review${reviews.length===1?'':'s'})</span></div><div class="profile-section"><h2>About</h2><p>${esc(x.description)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}${x.service_area?`<p><strong>Service area:</strong> ${esc(x.service_area)}</p>`:''}</div><div class="profile-section"><h2>Contact</h2><p class="contact-number">${esc(x.phone||'Contact details available soon.')}</p><div class="actions">${x.phone?`<a class="button" href="tel:${esc(x.phone)}" onclick="contactListing('${x.id}','call')">☎ Call</a><a class="button whatsapp" href="https://wa.me/${wa}" onclick="contactListing('${x.id}','whatsapp')" target="_blank" rel="noopener noreferrer">WhatsApp</a>`:''}${site}<a class="button secondary" href="${mapUrl(x.location)}" target="_blank" rel="noopener noreferrer">📍 Open map</a></div></div><div class="profile-section"><h2>Reviews</h2><form class="review-form" onsubmit="event.preventDefault();submitReview('${x.id}')"><select id="reviewRating" required><option value="">Your rating</option><option value="5">5 — Excellent</option><option value="4">4 — Very good</option><option value="3">3 — Good</option><option value="2">2 — Fair</option><option value="1">1 — Poor</option></select><textarea id="reviewText" placeholder="Write a review (optional)"></textarea><button>Submit review</button><p id="reviewMsg" class="muted"></p></form><div class="reviews">${reviewList}</div></div><p class="muted">Share this profile with someone who needs this service.</p><div class="actions"><button class="secondary" onclick="navigator.clipboard?.writeText(location.href).then(()=>this.textContent='Link copied ✓')">Copy profile link</button><a class="button secondary" href="discover.html">← Back to Discover</a></div></div>`;
+ const {data:{user}}=await maltSupabase.auth.getUser();
+ const role=user?await getAccountRole(user):null;
+ const canReview=role==='user' && x.owner_id!==user.id;
+ let reviewBox='<p class="muted">Customer ratings and reviews are shown below.</p>';
+ if(canReview) reviewBox=`<form class="review-form" onsubmit="event.preventDefault();submitReview('${x.id}')"><select id="reviewRating" required><option value="">Your rating</option><option value="5">5 — Excellent</option><option value="4">4 — Very good</option><option value="3">3 — Good</option><option value="2">2 — Fair</option><option value="1">1 — Poor</option></select><textarea id="reviewText" placeholder="Write a review (optional)"></textarea><button>Submit review</button><p id="reviewMsg" class="muted"></p></form>`;
+ else if(user && role!=='user') reviewBox='<p class="muted">Only Ordinary Users can give ratings and reviews. You can view customer feedback below.</p>';
+ else if(user && x.owner_id===user.id) reviewBox='<p class="muted">This is your listing. You can view customer feedback below, but you cannot rate or review your own service.</p>';
+ else reviewBox='<p class="muted">Log in as an Ordinary User to give a rating or review. Customer feedback is visible below.</p>';
+ const reviewList=reviews.length?reviews.map(r=>`<article class="review"><div><strong>${stars(r.rating)}</strong> <span class="muted">${new Date(r.created_at).toLocaleDateString()}</span></div><p>${esc(r.review||'No written comment.')}</p></article>`).join(''):'<p class="muted">No reviews yet.</p>';
+ $('#profile').innerHTML=`<div class="profile card"><div class="profile-head"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${saved?'saved':''}" onclick="toggleSaved('${x.id}');showProfile()">${saved?'♥ Saved':'♡ Save'}</button></div><h1>${esc(x.name)}</h1><p class="profile-meta">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><div class="rating-summary"><strong>★ ${avg}</strong> <span class="muted">(${reviews.length} review${reviews.length===1?'':'s'})</span></div><div class="profile-section"><h2>About</h2><p>${esc(x.description)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}${x.service_area?`<p><strong>Service area:</strong> ${esc(x.service_area)}</p>`:''}</div><div class="profile-section"><h2>Contact</h2><p class="contact-number">${esc(x.phone||'Contact details available soon.')}</p><div class="actions">${x.phone?`<a class="button" href="tel:${esc(x.phone)}" onclick="contactListing('${x.id}','call')">☎ Call</a><a class="button whatsapp" href="https://wa.me/${wa}" onclick="contactListing('${x.id}','whatsapp')" target="_blank" rel="noopener noreferrer">WhatsApp</a>`:''}${site}<a class="button secondary" href="${mapUrl(x.location)}" target="_blank" rel="noopener noreferrer">📍 Open map</a></div></div><div class="profile-section"><h2>Customer feedback</h2>${reviewBox}<div class="reviews">${reviewList}</div></div><p class="muted">Share this profile with someone who needs this service.</p><div class="actions"><button class="secondary" onclick="navigator.clipboard?.writeText(location.href).then(()=>this.textContent='Link copied ✓')">Copy profile link</button><a class="button secondary" href="discover.html">← Back to Discover</a></div></div>`;
 }
 async function login(e){e.preventDefault();const {error}=await maltSupabase.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});if(error){$('#msg').textContent=error.message;return}location='dashboard.html'}
 async function register(e){e.preventDefault();const rawRole=$('#role').value||'user';const roleMap={'Ordinary User':'user','Business / Organization':'business','Business':'business','Service Provider':'service_provider','Organization':'organization'};const role=roleMap[rawRole]||rawRole;const {data,error}=await maltSupabase.auth.signUp({email:$('#email').value,password:$('#password').value,options:{data:{full_name:$('#name').value,role}}});if(error){$('#msg').textContent=error.message;return}if(data.user){const r=await maltSupabase.from('malt_user_roles').upsert({user_id:data.user.id,role},{onConflict:'user_id'});if(r.error){$('#msg').textContent='Account created, but role setup failed: '+r.error.message;return;}}$('#msg').textContent=data.session?'Account created.':'Account created. You can now log in.';setTimeout(()=>location='login.html',700)}
@@ -74,6 +86,19 @@ async function getAccountRole(user){
  return (!r.error&&r.data)||user.user_metadata?.role||'user';
 }
 function roleLabel(role){return ({user:'Ordinary User',business:'Business',service_provider:'Service Provider',organization:'Organization',admin:'Administrator'})[role]||'Ordinary User'}
+async function loadOwnerFeedback(userId){
+ const box=$('#ownerFeedback'); if(!box)return;
+ const owned=LISTINGS.filter(x=>x.owner_id===userId&&x.status==='active');
+ const ids=owned.map(x=>x.id);
+ if(!ids.length){box.innerHTML='<p class="muted">Approve a listing first to start receiving customer feedback.</p>';return;}
+ const r=await maltSupabase.from('reviews').select('listing_id,rating,review,created_at').in('listing_id',ids).order('created_at',{ascending:false});
+ if(r.error){box.innerHTML='<p class="muted">Customer feedback is temporarily unavailable.</p>';return;}
+ const rows=r.data||[];
+ const avg=rows.length?(rows.reduce((s,x)=>s+Number(x.rating||0),0)/rows.length).toFixed(1):'0.0';
+ const recent=rows.slice(0,5).map(x=>{const l=owned.find(y=>y.id===x.listing_id);return `<article class="review"><div><strong>${stars(x.rating)}</strong> <span class="muted">${esc(l?.name||'Your listing')} · ${new Date(x.created_at).toLocaleDateString()}</span></div><p>${esc(x.review||'No written comment.')}</p></article>`}).join('');
+ box.innerHTML=`<div class="stats"><div class="stat"><strong>${rows.length}</strong><span>Customer reviews</span></div><div class="stat"><strong>${avg}</strong><span>Average rating</span></div><div class="stat"><strong>${new Set(rows.map(x=>x.listing_id)).size}</strong><span>Listings reviewed</span></div></div>${recent?`<div class="reviews">${recent}</div>`:'<p class="muted">No customer reviews yet. When Ordinary Users rate your service, their feedback will appear here.</p>'}`;
+}
+
 async function dashboard(){
  const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
  const role=await getAccountRole(user);
@@ -107,7 +132,8 @@ async function dashboard(){
  const {data,error}=await maltSupabase.from('listings').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});
  if(error){$('#myListings').innerHTML='<div class="card">'+esc(error.message)+'</div>';return}
  const mine=data||[];
- await loadNotifications(); await loadFavourites(); await loadOwnerStats(user.id);
+ await loadNotifications(); await loadFavourites(); await loadOwnerStats(user.id); await loadOwnerFeedback(user.id);
+ if($('#ownerFeedbackSection')) $('#ownerFeedbackSection').hidden=(role==='user'||role==='admin');
  if($('#providerStats')){
    const services=mine.filter(x=>x.type==='Service Provider');
    $('#providerStats').innerHTML=`<div class="stat"><strong>${services.length}</strong><span>My services</span></div><div class="stat"><strong>${services.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${services.filter(x=>x.status==='pending').length}</strong><span>Pending</span></div>`;
@@ -207,6 +233,18 @@ async function prepareCreateProfile(){
  if(role==='organization'){if($('#createTitle'))$('#createTitle').textContent='Create organization profile';if($('#createEyebrow'))$('#createEyebrow').textContent='ORGANIZATION PRESENCE';if($('#createSubmit'))$('#createSubmit').textContent='Submit organization profile';}
  if(role==='user'){if($('#createTitle'))$('#createTitle').textContent='Create a local profile';}
 }
+function initPasswordToggles(){
+ document.querySelectorAll('input[type="password"]').forEach(input=>{
+  if(input.dataset.toggleReady)return;
+  input.dataset.toggleReady='1';
+  const wrap=document.createElement('div'); wrap.className='password-wrap';
+  input.parentNode.insertBefore(wrap,input); wrap.appendChild(input);
+  const button=document.createElement('button'); button.type='button'; button.className='password-toggle secondary'; button.textContent='Show'; button.setAttribute('aria-label','Show password');
+  button.addEventListener('click',()=>{const visible=input.type==='text';input.type=visible?'password':'text';button.textContent=visible?'Show':'Hide';button.setAttribute('aria-label',visible?'Show password':'Hide password');input.focus();});
+  wrap.appendChild(button);
+ });
+}
+
 async function init(){
 
  if(!online())return;
@@ -224,5 +262,6 @@ async function init(){
  if($('#adminListings'))admin();
  if($('#events')){$('#eq').addEventListener('input',events);events()}
  if($('#opps')){$('#oq').addEventListener('input',opps);opps()}
+ initPasswordToggles();
 }
 init();
