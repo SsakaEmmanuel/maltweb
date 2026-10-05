@@ -2,21 +2,6 @@ const $=s=>document.querySelector(s);
 const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const online=()=>!!window.maltSupabase;
 
-// ===== MALTWEB v24 PLATFORM LAYER =====
-async function currentUser(){const {data:{user}}=await maltSupabase.auth.getUser();return user}
-async function savedIds(){const u=await currentUser();if(!u)return[];const r=await maltSupabase.from('favorites').select('listing_id').eq('user_id',u.id);return r.error?[]:(r.data||[]).map(x=>String(x.listing_id))}
-async function syncSaved(id){const u=await currentUser(); if(!u){location='login.html';return} id=String(id); const {data:row}=await maltSupabase.from('favorites').select('listing_id').eq('user_id',u.id).eq('listing_id',id).maybeSingle(); if(row){await maltSupabase.from('favorites').delete().eq('user_id',u.id).eq('listing_id',id)}else{await maltSupabase.from('favorites').insert({user_id:u.id,listing_id:id})} await loadData(); render(); if($('#profile')) await showProfile();}
-window.syncSaved=syncSaved;
-async function contactListing(listingId,kind){const u=await currentUser(); if(u) await maltSupabase.from('contact_events').insert({listing_id:listingId,user_id:u.id,channel:kind});}
-window.contactListing=contactListing;
-function mapUrl(locationText){return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(locationText||'')}
-async function loadNotifications(){const u=await currentUser(); if(!u||!$('#notifications'))return; const r=await maltSupabase.from('notifications').select('*').eq('user_id',u.id).order('created_at',{ascending:false}).limit(8); if(r.error)return; $('#notifications').innerHTML=(r.data||[]).map(n=>`<article class="notice ${n.read?'':'unread'}"><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small class="muted">${new Date(n.created_at).toLocaleString()}</small></article>`).join('')||'<p class="muted">No notifications yet.</p>';}
-async function markNotificationsRead(){const u=await currentUser();if(!u)return;await maltSupabase.from('notifications').update({read:true}).eq('user_id',u.id).eq('read',false);await loadNotifications()}
-window.markNotificationsRead=markNotificationsRead;
-async function loadFavourites(){const u=await currentUser();if(!u||!$('#favourites'))return;const r=await maltSupabase.from('favorites').select('listing_id,created_at').eq('user_id',u.id).order('created_at',{ascending:false});if(r.error){$('#favourites').innerHTML='<p class="muted">Run the v24 SQL migration first.</p>';return}const ids=(r.data||[]).map(x=>x.listing_id);const items=LISTINGS.filter(x=>ids.includes(x.id));$('#favourites').innerHTML=items.map(card).join('')||'<p class="muted">You have no saved listings yet.</p>';}
-async function loadOwnerStats(userId){if(!$('#ownerStats'))return;const [c,r]=await Promise.all([maltSupabase.from('contact_events').select('id',{count:'exact',head:true}).eq('listing_owner_id',userId),maltSupabase.from('favorites').select('listing_id',{count:'exact',head:true}).in('listing_id',LISTINGS.filter(x=>x.owner_id===userId).map(x=>x.id))]);$('#ownerStats').innerHTML=`<div class="stat"><strong>${c.count||0}</strong><span>Contact actions</span></div><div class="stat"><strong>${r.count||0}</strong><span>Saved by users</span></div>`}
-
-
 async function loadData(){
  if(!online())return;
  const [l,e,o]=await Promise.all([
@@ -31,6 +16,41 @@ function isSaved(id){try{return JSON.parse(localStorage.getItem('maltweb_favouri
 function toggleSaved(id){let a=[];try{a=JSON.parse(localStorage.getItem('maltweb_favourites')||'[]')}catch{};id=String(id);a=a.includes(id)?a.filter(x=>x!==id):[...a,id];localStorage.setItem('maltweb_favourites',JSON.stringify(a));render()}
 window.toggleSaved=toggleSaved;
 
+async function logInteraction(listingId,eventType,metadata={}){
+ if(!online()||!listingId)return;
+ try{ await maltSupabase.rpc('malt_log_interaction',{p_listing_id:listingId,p_event_type:eventType,p_metadata:metadata}); }catch(e){console.warn('interaction log failed',e)}
+}
+async function trackAndGo(listingId,eventType,url){await logInteraction(listingId,eventType); if(url)location.href=url;}
+window.trackAndGo=trackAndGo;
+async function loadOwnerInteractions(listingIds){
+ if(!listingIds?.length)return [];
+ const {data,error}=await maltSupabase.from('listing_interactions').select('id,listing_id,actor_user_id,event_type,metadata,created_at').in('listing_id',listingIds).order('created_at',{ascending:false});
+ return error?[]:(data||[]);
+}
+async function loadInteractionDashboard(user,role,mine){
+ const box=$('#interactionDashboard'); if(!box)return;
+ if(role==='user'){
+  const {data,error}=await maltSupabase.from('listing_interactions').select('id,listing_id,event_type,created_at,metadata').eq('actor_user_id',user.id).order('created_at',{ascending:false}).limit(100);
+  if(error){box.innerHTML='<div class="card"><h3>Interaction history</h3><p class="muted">'+esc(error.message)+'</p></div>';return;}
+  const ids=[...new Set((data||[]).map(x=>x.listing_id))];
+  let names={};
+  if(ids.length){const r=await maltSupabase.from('listings').select('id,name,type').in('id',ids);(r.data||[]).forEach(x=>names[x.id]=x);}
+  const counts={profile_view:0,call:0,whatsapp:0,website:0};(data||[]).forEach(x=>counts[x.event_type]=(counts[x.event_type]||0)+1);
+  const rows=(data||[]).slice(0,20).map(x=>`<article class="interaction-row"><strong>${esc(names[x.listing_id]?.name||'Listing')}</strong><span>${esc((x.event_type||'interaction').replaceAll('_',' '))}</span><small>${new Date(x.created_at).toLocaleString()}</small></article>`).join('')||'<p class="muted">No interactions yet. Start by contacting a local listing.</p>';
+  box.innerHTML=`<section class="card"><div class="profile-head"><div><span class="eyebrow">MY ACTIVITY</span><h2>Interaction history</h2></div></div><div class="stats"><div class="stat"><strong>${data?.length||0}</strong><span>Total</span></div><div class="stat"><strong>${counts.call||0}</strong><span>Calls</span></div><div class="stat"><strong>${counts.whatsapp||0}</strong><span>WhatsApp</span></div><div class="stat"><strong>${counts.profile_view||0}</strong><span>Profile views</span></div></div><div class="interaction-list">${rows}</div></section>`;
+  return;
+ }
+ if(['business','service_provider','organization'].includes(role)){
+  const active=mine.filter(x=>x.status==='active');
+  const ints=await loadOwnerInteractions(active.map(x=>x.id));
+  const counts={profile_view:0,call:0,whatsapp:0,website:0};ints.forEach(x=>counts[x.event_type]=(counts[x.event_type]||0)+1);
+  const byListing={};ints.forEach(x=>{byListing[x.listing_id]=(byListing[x.listing_id]||0)+1});
+  const cards=active.map(x=>`<article class="interaction-row"><strong>${esc(x.name)}</strong><span>${byListing[x.id]||0} interaction${byListing[x.id]===1?'':'s'}</span><a href="profile.html?id=${encodeURIComponent(x.id)}">View profile</a></article>`).join('')||'<p class="muted">Approve a profile to start receiving interaction data.</p>';
+  box.innerHTML=`<section class="card"><div class="profile-head"><div><span class="eyebrow">CUSTOMER ACTIVITY</span><h2>Customer interactions</h2></div></div><div class="stats"><div class="stat"><strong>${ints.length}</strong><span>Total</span></div><div class="stat"><strong>${counts.profile_view||0}</strong><span>Profile views</span></div><div class="stat"><strong>${counts.call||0}</strong><span>Calls</span></div><div class="stat"><strong>${counts.whatsapp||0}</strong><span>WhatsApp</span></div></div><p class="muted">Customer contact actions are counted here. Customer identities are only shown when available through authenticated interactions.</p><div class="interaction-list">${cards}</div></section>`;
+  return;
+ }
+ box.innerHTML='';
+}
 async function loadReviews(listingId){
  const {data,error}=await maltSupabase.from('reviews').select('id,user_id,rating,review,created_at').eq('listing_id',listingId).order('created_at',{ascending:false});
  return error?[]:(data||[]);
@@ -39,10 +59,6 @@ function stars(n){return '★'.repeat(Number(n)||0)+'☆'.repeat(5-(Number(n)||0
 async function submitReview(listingId){
  const {data:{user}}=await maltSupabase.auth.getUser();
  if(!user){location='login.html';return;}
- const role=await getAccountRole(user);
- if(role!=='user'){$('#reviewMsg').textContent='Only Ordinary Users can give ratings and reviews.';return;}
- const listing=LISTINGS.find(x=>String(x.id)===String(listingId));
- if(listing?.owner_id===user.id){$('#reviewMsg').textContent='You cannot review your own listing.';return;}
  const rating=Number($('#reviewRating')?.value||0), text=$('#reviewText')?.value.trim()||'';
  if(!rating||rating<1||rating>5){$('#reviewMsg').textContent='Please choose a rating from 1 to 5.';return;}
  const {error}=await maltSupabase.from('reviews').upsert({listing_id:listingId,user_id:user.id,rating,review:text||null},{onConflict:'listing_id,user_id'});
@@ -51,7 +67,7 @@ async function submitReview(listingId){
  await showProfile();
 }
 window.submitReview=submitReview;
-function card(x){return `<article class="card listing-card"><div class="cardtop"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${isSaved(x.id)?'saved':''}" onclick="syncSaved('${x.id}')" aria-label="Save profile">${isSaved(x.id)?'♥':'♡'}</button></div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><p>${esc(x.description)}</p><div class="actions"><a class="button" href="profile.html?id=${encodeURIComponent(x.id)}">View profile</a>${x.phone?`<a class="button secondary" href="tel:${esc(x.phone)}">Call</a>`:''}</div></article>`}
+function card(x){return `<article class="card listing-card">${x.logo_url?`<img class="listing-logo" src="${esc(x.logo_url)}" alt="">`:''}<div class="cardtop"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${isSaved(x.id)?'saved':''}" onclick="toggleSaved('${x.id}')" aria-label="Save profile">${isSaved(x.id)?'♥':'♡'}</button></div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><p>${esc(x.description)}</p><div class="actions"><a class="button" href="profile.html?id=${encodeURIComponent(x.id)}">View profile</a>${x.phone?`<a class="button secondary" href="tel:${esc(x.phone)}" onclick="logInteraction('${x.id}','call')">Call</a>`:''}</div></article>`}
 function render(){
  let p=new URLSearchParams(location.search);
  let q=($('#q')?.value||p.get('q')||'').toLowerCase(), loc=($('#loc')?.value||p.get('location')||'').toLowerCase(), cat=$('#cat')?.value||p.get('category')||'', type=$('#type')?.value||'';
@@ -62,20 +78,15 @@ function render(){
 async function showProfile(){
  const id=new URLSearchParams(location.search).get('id'); const x=LISTINGS.find(a=>String(a.id)===String(id));
  if(!x){$('#profile').innerHTML='<div class="card"><h2>Profile not found</h2><p>This listing may still be pending review.</p></div>';return}
+ logInteraction(x.id,'profile_view');
  const wa=waNumber(x.phone), saved=isSaved(x.id); let site='';
- if(x.website){let u=String(x.website).trim(); if(!/^https?:\/\//i.test(u))u='https://'+u; site=`<a class="button secondary" href="${esc(u)}" target="_blank" rel="noopener noreferrer">Visit website ↗</a>`}
+ if(x.website){let u=String(x.website).trim(); if(!/^https?:\/\//i.test(u))u='https://'+u; site=`<a class="button secondary" href="${esc(u)}" target="_blank" rel="noopener noreferrer" onclick="logInteraction('${x.id}','website')">Visit website ↗</a>`}
  const reviews=await loadReviews(x.id);
  const avg=reviews.length?(reviews.reduce((sum,r)=>sum+Number(r.rating||0),0)/reviews.length).toFixed(1):'0.0';
- const {data:{user}}=await maltSupabase.auth.getUser();
- const role=user?await getAccountRole(user):null;
- const canReview=role==='user' && x.owner_id!==user.id;
- let reviewBox='<p class="muted">Customer ratings and reviews are shown below.</p>';
- if(canReview) reviewBox=`<form class="review-form" onsubmit="event.preventDefault();submitReview('${x.id}')"><select id="reviewRating" required><option value="">Your rating</option><option value="5">5 — Excellent</option><option value="4">4 — Very good</option><option value="3">3 — Good</option><option value="2">2 — Fair</option><option value="1">1 — Poor</option></select><textarea id="reviewText" placeholder="Write a review (optional)"></textarea><button>Submit review</button><p id="reviewMsg" class="muted"></p></form>`;
- else if(user && role!=='user') reviewBox='<p class="muted">Only Ordinary Users can give ratings and reviews. You can view customer feedback below.</p>';
- else if(user && x.owner_id===user.id) reviewBox='<p class="muted">This is your listing. You can view customer feedback below, but you cannot rate or review your own service.</p>';
- else reviewBox='<p class="muted">Log in as an Ordinary User to give a rating or review. Customer feedback is visible below.</p>';
  const reviewList=reviews.length?reviews.map(r=>`<article class="review"><div><strong>${stars(r.rating)}</strong> <span class="muted">${new Date(r.created_at).toLocaleDateString()}</span></div><p>${esc(r.review||'No written comment.')}</p></article>`).join(''):'<p class="muted">No reviews yet.</p>';
- $('#profile').innerHTML=`<div class="profile card"><div class="profile-head"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${saved?'saved':''}" onclick="toggleSaved('${x.id}');showProfile()">${saved?'♥ Saved':'♡ Save'}</button></div><h1>${esc(x.name)}</h1><p class="profile-meta">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><div class="rating-summary"><strong>★ ${avg}</strong> <span class="muted">(${reviews.length} review${reviews.length===1?'':'s'})</span></div><div class="profile-section"><h2>About</h2><p>${esc(x.description)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}${x.service_area?`<p><strong>Service area:</strong> ${esc(x.service_area)}</p>`:''}</div><div class="profile-section"><h2>Contact</h2><p class="contact-number">${esc(x.phone||'Contact details available soon.')}</p><div class="actions">${x.phone?`<a class="button" href="tel:${esc(x.phone)}" onclick="contactListing('${x.id}','call')">☎ Call</a><a class="button whatsapp" href="https://wa.me/${wa}" onclick="contactListing('${x.id}','whatsapp')" target="_blank" rel="noopener noreferrer">WhatsApp</a>`:''}${site}<a class="button secondary" href="${mapUrl(x.location)}" target="_blank" rel="noopener noreferrer">📍 Open map</a></div></div><div class="profile-section"><h2>Customer feedback</h2>${reviewBox}<div class="reviews">${reviewList}</div></div><p class="muted">Share this profile with someone who needs this service.</p><div class="actions"><button class="secondary" onclick="navigator.clipboard?.writeText(location.href).then(()=>this.textContent='Link copied ✓')">Copy profile link</button><a class="button secondary" href="discover.html">← Back to Discover</a></div></div>`;
+ let reviewBox='<p class="muted">Log in as an Ordinary User to leave a rating or review.</p>';
+ try{const {data:{user}}=await maltSupabase.auth.getUser(); if(user){const rr=await getAccountRole(user); if(rr==='user')reviewBox=`<form class="review-form" onsubmit="event.preventDefault();submitReview('${x.id}')"><select id="reviewRating" required><option value="">Your rating</option><option value="5">5 — Excellent</option><option value="4">4 — Very good</option><option value="3">3 — Good</option><option value="2">2 — Fair</option><option value="1">1 — Poor</option></select><textarea id="reviewText" placeholder="Write a review (optional)"></textarea><button>Submit review</button><p id="reviewMsg" class="muted"></p></form>`; else reviewBox='<p class="muted">Customer reviews are for Ordinary Users. You can view feedback below.</p>';}}catch(e){}
+ $('#profile').innerHTML=`<div class="profile card">${x.logo_url?`<img class="profile-logo" src="${esc(x.logo_url)}" alt="${esc(x.name)} logo">`:''}<div class="profile-head"><span class="pill">${x.verified?'✓ Verified':'Local listing'}</span><button class="iconbtn ${saved?'saved':''}" onclick="toggleSaved('${x.id}');showProfile()">${saved?'♥ Saved':'♡ Save'}</button></div><h1>${esc(x.name)}</h1><p class="profile-meta">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p><div class="rating-summary"><strong>★ ${avg}</strong> <span class="muted">(${reviews.length} review${reviews.length===1?'':'s'})</span></div><div class="profile-section"><h2>About</h2><p>${esc(x.description)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}${x.service_area?`<p><strong>Service area:</strong> ${esc(x.service_area)}</p>`:''}</div><div class="profile-section"><h2>Contact</h2><p class="contact-number">${esc(x.phone||'Contact details available soon.')}</p><div class="actions">${x.phone?`<a class="button" href="tel:${esc(x.phone)}" onclick="logInteraction('${x.id}','call')">☎ Call</a><a class="button whatsapp" href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer" onclick="logInteraction('${x.id}','whatsapp')">WhatsApp</a>`:''}${site}</div></div><div class="profile-section"><h2>Reviews</h2>${reviewBox}<div class="reviews">${reviewList}</div></div><p class="muted">Share this profile with someone who needs this service.</p><div class="actions"><button class="secondary" onclick="navigator.clipboard?.writeText(location.href).then(()=>this.textContent='Link copied ✓')">Copy profile link</button><a class="button secondary" href="discover.html">← Back to Discover</a></div></div>`;
 }
 async function login(e){e.preventDefault();const {error}=await maltSupabase.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});if(error){$('#msg').textContent=error.message;return}location='dashboard.html'}
 async function register(e){e.preventDefault();const rawRole=$('#role').value||'user';const roleMap={'Ordinary User':'user','Business / Organization':'business','Business':'business','Service Provider':'service_provider','Organization':'organization'};const role=roleMap[rawRole]||rawRole;const {data,error}=await maltSupabase.auth.signUp({email:$('#email').value,password:$('#password').value,options:{data:{full_name:$('#name').value,role}}});if(error){$('#msg').textContent=error.message;return}if(data.user){const r=await maltSupabase.from('malt_user_roles').upsert({user_id:data.user.id,role},{onConflict:'user_id'});if(r.error){$('#msg').textContent='Account created, but role setup failed: '+r.error.message;return;}}$('#msg').textContent=data.session?'Account created.':'Account created. You can now log in.';setTimeout(()=>location='login.html',700)}
@@ -86,19 +97,6 @@ async function getAccountRole(user){
  return (!r.error&&r.data)||user.user_metadata?.role||'user';
 }
 function roleLabel(role){return ({user:'Ordinary User',business:'Business',service_provider:'Service Provider',organization:'Organization',admin:'Administrator'})[role]||'Ordinary User'}
-async function loadOwnerFeedback(userId){
- const box=$('#ownerFeedback'); if(!box)return;
- const owned=LISTINGS.filter(x=>x.owner_id===userId&&x.status==='active');
- const ids=owned.map(x=>x.id);
- if(!ids.length){box.innerHTML='<p class="muted">Approve a listing first to start receiving customer feedback.</p>';return;}
- const r=await maltSupabase.from('reviews').select('listing_id,rating,review,created_at').in('listing_id',ids).order('created_at',{ascending:false});
- if(r.error){box.innerHTML='<p class="muted">Customer feedback is temporarily unavailable.</p>';return;}
- const rows=r.data||[];
- const avg=rows.length?(rows.reduce((s,x)=>s+Number(x.rating||0),0)/rows.length).toFixed(1):'0.0';
- const recent=rows.slice(0,5).map(x=>{const l=owned.find(y=>y.id===x.listing_id);return `<article class="review"><div><strong>${stars(x.rating)}</strong> <span class="muted">${esc(l?.name||'Your listing')} · ${new Date(x.created_at).toLocaleDateString()}</span></div><p>${esc(x.review||'No written comment.')}</p></article>`}).join('');
- box.innerHTML=`<div class="stats"><div class="stat"><strong>${rows.length}</strong><span>Customer reviews</span></div><div class="stat"><strong>${avg}</strong><span>Average rating</span></div><div class="stat"><strong>${new Set(rows.map(x=>x.listing_id)).size}</strong><span>Listings reviewed</span></div></div>${recent?`<div class="reviews">${recent}</div>`:'<p class="muted">No customer reviews yet. When Ordinary Users rate your service, their feedback will appear here.</p>'}`;
-}
-
 async function dashboard(){
  const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
  const role=await getAccountRole(user);
@@ -109,44 +107,26 @@ async function dashboard(){
  if($('#roleIntro'))$('#roleIntro').textContent=intro;
  const adminNav=$('#adminNav');
  if(adminNav) adminNav.hidden=role!=='admin';
- const createNav=$('#createNav');
- if(createNav){
-   if(role==='service_provider'){createNav.textContent='Create service';createNav.href='create-service.html';}
-   else if(role==='business'){createNav.textContent='Create business';createNav.href='create-profile.html';}
-   else if(role==='organization'){createNav.textContent='Create organization';createNav.href='create-profile.html';}
-   else {createNav.textContent='Create profile';createNav.href='create-profile.html';}
- }
- if(role==='service_provider'&&$('#providerWorkspace'))$('#providerWorkspace').hidden=false;
- if(role==='business'&&$('#businessWorkspace'))$('#businessWorkspace').hidden=false;
- if(role==='organization'&&$('#organizationWorkspace'))$('#organizationWorkspace').hidden=false;
+ const createNav=$('#createNav'); if(createNav && role==='service_provider'){createNav.textContent='Create service';createNav.href='create-service.html';}
  if($('#roleActions')){
    const links=[];
    if(role!=='admin')links.push('<a class="button" href="discover.html">Discover local options</a>');
    if(role==='service_provider')links.push('<a class="button" href="create-service.html">+ New service</a>');
-   else if(role==='business')links.push('<a class="button" href="create-profile.html">+ Create business profile</a>');
-   else if(role==='organization')links.push('<a class="button" href="create-profile.html">+ Create organization profile</a>');
-   else if(role==='admin')links.push('<a class="button" href="admin.html">Open admin review</a>');
-   else if(role==='user')links.push('<a class="button" href="create-profile.html">+ Create a profile</a>');
+   else if(role!=='user'&&role!=='admin')links.push('<a class="button" href="create-profile.html">+ Create '+esc(roleLabel(role))+' profile</a>');
+   if(role==='admin')links.push('<a class="button" href="admin.html">Open admin review</a>');
+   if(role==='user')links.push('<a class="button" href="create-profile.html">+ Create a profile</a>');
    $('#roleActions').innerHTML=links.join('');
  }
  const {data,error}=await maltSupabase.from('listings').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});
  if(error){$('#myListings').innerHTML='<div class="card">'+esc(error.message)+'</div>';return}
  const mine=data||[];
- await loadNotifications(); await loadFavourites(); await loadOwnerStats(user.id); await loadOwnerFeedback(user.id);
- if($('#ownerFeedbackSection')) $('#ownerFeedbackSection').hidden=(role==='user'||role==='admin');
  if($('#providerStats')){
    const services=mine.filter(x=>x.type==='Service Provider');
    $('#providerStats').innerHTML=`<div class="stat"><strong>${services.length}</strong><span>My services</span></div><div class="stat"><strong>${services.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${services.filter(x=>x.status==='pending').length}</strong><span>Pending</span></div>`;
- }
- if($('#businessStats')){
-   const items=mine.filter(x=>x.type==='Business');
-   $('#businessStats').innerHTML=`<div class="stat"><strong>${items.length}</strong><span>Business profiles</span></div><div class="stat"><strong>${items.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${items.filter(x=>x.status==='pending').length}</strong><span>Pending review</span></div>`;
- }
- if($('#organizationStats')){
-   const items=mine.filter(x=>x.type==='Organization');
-   $('#organizationStats').innerHTML=`<div class="stat"><strong>${items.length}</strong><span>Organization profiles</span></div><div class="stat"><strong>${items.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${items.filter(x=>x.status==='pending').length}</strong><span>Pending review</span></div>`;
+   $('#providerWorkspace').hidden=role!=='service_provider';
  }
  $('#myListings').innerHTML=mine.map(x=>`<article class="card"><div class="profile-head"><span class="pill">${esc(x.status)}</span>${x.type==='Service Provider'?`<span class="muted">Service</span>`:''}</div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}<div class="actions">${x.status==='active'?`<a class="button" href="profile.html?id=${encodeURIComponent(x.id)}">View public profile</a>`:''}<a class="button secondary" href="edit-profile.html?id=${encodeURIComponent(x.id)}">✎ ${x.type==='Service Provider'?'Edit service':'Edit'}</a><button class="secondary" onclick="deleteMyListing('${x.id}')">Delete</button></div></article>`).join('')||'<div class="card">No submissions yet.</div>';
+ await loadInteractionDashboard(user,role,mine);
 }
 async function deleteMyListing(id){
  if(!confirm('Delete this profile? This cannot be undone.'))return;
@@ -179,7 +159,7 @@ async function createProfile(e){
  const role=await getAccountRole(user); if(role==='admin'){ $('#msg').textContent='Administrators manage listings from the Admin panel.'; return; }
  const allowed={user:['Service Provider','Business','Organization','Community'],business:['Business'],service_provider:['Service Provider'],organization:['Organization']}[role]||['Service Provider'];
  const selected=$('#pt').value; if(!allowed.includes(selected)){ $('#msg').textContent='Your '+roleLabel(role)+' account can only publish: '+allowed.join(', ')+'.'; return; }
- const payload={name:$('#pn').value,category:$('#pc').value,type:selected,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,price:$('#pprice')?.value.trim()||null,price_unit:$('#ppriceUnit')?.value.trim()||null,service_area:$('#parea')?.value.trim()||null,verified:false,status:'pending',owner_id:user.id};
+ let logo_url=null; if($('#plogo')?.files?.[0] && window.v27Upload){ try{ logo_url=await v27Upload($('#plogo').files[0],'listing-logo'); }catch(err){ $('#msg').textContent='Logo upload failed: '+err.message; return; }} const payload={name:$('#pn').value,category:$('#pc').value,type:selected,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,logo_url,price:$('#pprice')?.value.trim()||null,price_unit:$('#ppriceUnit')?.value.trim()||null,service_area:$('#parea')?.value.trim()||null,verified:false,status:'pending',owner_id:user.id};
  const {error}=await maltSupabase.from('listings').insert(payload);
  $('#msg').textContent=error?error.message:'✓ Profile submitted online for admin review.'; if(!error)e.target.reset();
 }
@@ -212,10 +192,7 @@ async function admin(){
 }
 async function setStatus(id,status){
  const {data,error}=await maltSupabase.rpc('malt_set_listing_status',{p_listing_id:id,p_status:status});
- if(error||!data){alert(error?.message||'Update failed');return}
- const row=await maltSupabase.from('listings').select('owner_id,name').eq('id',id).maybeSingle();
- if(row.data?.owner_id) await maltSupabase.from('notifications').insert({user_id:row.data.owner_id,title:status==='active'?'Listing approved':'Listing status updated',message:`Your listing '${row.data.name}' is now ${status}.`});
- location.reload();
+ if(error||!data){alert(error?.message||'Update failed');return} location.reload();
 }
 async function events(){let q=($('#eq')?.value||'').toLowerCase();$('#events').innerHTML=EVENTS.filter(x=>(x.name+' '+x.description+' '+x.location).toLowerCase().includes(q)).map(x=>`<article class="card"><span class="pill">${esc(x.date||'')}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category||'Event')} · ${esc(x.location)}</p><p>${esc(x.description)}</p></article>`).join('')||'<div class="card">No events found.</div>'}
 async function opps(){let q=($('#oq')?.value||'').toLowerCase();$('#opps').innerHTML=OPPORTUNITIES.filter(x=>(x.name+' '+x.description+' '+x.location).toLowerCase().includes(q)).map(x=>`<article class="card"><span class="pill">${esc(x.type)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.location)}</p><p>${esc(x.description)}</p></article>`).join('')||'<div class="card">No opportunities found.</div>'}
@@ -229,22 +206,7 @@ async function prepareCreateProfile(){
  if($('#profileRole'))$('#profileRole').textContent=roleLabel(role);
  if($('#profileRoleMsg'))$('#profileRoleMsg').textContent='This account can publish: '+allowed.join(', ')+'.';
  if(select){select.innerHTML=allowed.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');}
- if(role==='business'){if($('#createTitle'))$('#createTitle').textContent='Create business profile';if($('#createEyebrow'))$('#createEyebrow').textContent='BUSINESS PRESENCE';if($('#createSubmit'))$('#createSubmit').textContent='Submit business profile';}
- if(role==='organization'){if($('#createTitle'))$('#createTitle').textContent='Create organization profile';if($('#createEyebrow'))$('#createEyebrow').textContent='ORGANIZATION PRESENCE';if($('#createSubmit'))$('#createSubmit').textContent='Submit organization profile';}
- if(role==='user'){if($('#createTitle'))$('#createTitle').textContent='Create a local profile';}
 }
-function initPasswordToggles(){
- document.querySelectorAll('input[type="password"]').forEach(input=>{
-  if(input.dataset.toggleReady)return;
-  input.dataset.toggleReady='1';
-  const wrap=document.createElement('div'); wrap.className='password-wrap';
-  input.parentNode.insertBefore(wrap,input); wrap.appendChild(input);
-  const button=document.createElement('button'); button.type='button'; button.className='password-toggle secondary'; button.textContent='Show'; button.setAttribute('aria-label','Show password');
-  button.addEventListener('click',()=>{const visible=input.type==='text';input.type=visible?'password':'text';button.textContent=visible?'Show':'Hide';button.setAttribute('aria-label',visible?'Show password':'Hide password');input.focus();});
-  wrap.appendChild(button);
- });
-}
-
 async function init(){
 
  if(!online())return;
@@ -262,6 +224,5 @@ async function init(){
  if($('#adminListings'))admin();
  if($('#events')){$('#eq').addEventListener('input',events);events()}
  if($('#opps')){$('#oq').addEventListener('input',opps);opps()}
- initPasswordToggles();
 }
 init();
