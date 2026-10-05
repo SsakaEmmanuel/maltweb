@@ -94,7 +94,9 @@ async function getAccountRole(user){
  const adminRes=await maltSupabase.rpc('malt_is_admin');
  if(!adminRes.error&&adminRes.data)return 'admin';
  const r=await maltSupabase.rpc('malt_get_my_role');
- return (!r.error&&r.data)||user.user_metadata?.role||'user';
+ const dbRole=(!r.error&&r.data)?String(r.data).toLowerCase():'';
+ const metaRole=String(user.user_metadata?.role||'').toLowerCase();
+ return ['admin','business','service_provider','organization','user'].includes(dbRole)?dbRole:(['admin','business','service_provider','organization','user'].includes(metaRole)?metaRole:'user');
 }
 function roleLabel(role){return ({user:'Ordinary User',business:'Business',service_provider:'Service Provider',organization:'Organization',admin:'Administrator'})[role]||'Ordinary User'}
 async function dashboard(){
