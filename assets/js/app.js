@@ -79,14 +79,45 @@ async function dashboard(){
  }
  const {data,error}=await maltSupabase.from('listings').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});
  if(error){$('#myListings').innerHTML='<div class="card">'+esc(error.message)+'</div>';return}
- $('#myListings').innerHTML=(data||[]).map(x=>`<article class="card"><span class="pill">${esc(x.status)}</span><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p></article>`).join('')||'<div class="card">No submissions yet.</div>';
+ const mine=data||[];
+ if($('#providerStats')){
+   const services=mine.filter(x=>x.type==='Service Provider');
+   $('#providerStats').innerHTML=`<div class="stat"><strong>${services.length}</strong><span>My services</span></div><div class="stat"><strong>${services.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${services.filter(x=>x.status==='pending').length}</strong><span>Pending</span></div>`;
+   $('#providerWorkspace').hidden=role!=='service_provider';
+ }
+ $('#myListings').innerHTML=mine.map(x=>`<article class="card"><div class="profile-head"><span class="pill">${esc(x.status)}</span>${x.type==='Service Provider'?`<span class="muted">Service</span>`:''}</div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}<div class="actions">${x.status==='active'?`<a class="button" href="profile.html?id=${encodeURIComponent(x.id)}">View public profile</a>`:''}<a class="button secondary" href="edit-profile.html?id=${encodeURIComponent(x.id)}">✎ Edit</a><button class="secondary" onclick="deleteMyListing('${x.id}')">Delete</button></div></article>`).join('')||'<div class="card">No submissions yet.</div>';
 }
+async function deleteMyListing(id){
+ if(!confirm('Delete this profile? This cannot be undone.'))return;
+ const {data,error}=await maltSupabase.rpc('malt_delete_my_listing',{p_listing_id:id});
+ if(error||!data){alert(error?.message||'Delete failed');return;}
+ location.reload();
+}
+window.deleteMyListing=deleteMyListing;
+async function prepareEditProfile(){
+ const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return;}
+ const role=await getAccountRole(user); if(role!=='service_provider'&&role!=='business'&&role!=='organization'){ $('#editMsg').textContent='This account does not have a managed business/service profile.'; return; }
+ const id=new URLSearchParams(location.search).get('id'); if(!id){$('#editMsg').textContent='Missing profile ID.';return;}
+ const {data,error}=await maltSupabase.from('listings').select('*').eq('id',id).eq('owner_id',user.id).maybeSingle();
+ if(error||!data){$('#editMsg').textContent=error?.message||'Profile not found or you do not own it.';return;}
+ $('#editRole').textContent=roleLabel(role);
+ $('#epn').value=data.name||''; $('#epc').value=data.category||''; $('#epl').value=data.location||''; $('#epd').value=data.description||''; $('#epp').value=data.phone||''; $('#epw').value=data.website||''; $('#eprice').value=data.price||''; $('#epriceUnit').value=data.price_unit||''; $('#eparea').value=data.service_area||'';
+ $('#editForm').dataset.id=id;
+}
+async function editProfile(e){
+ e.preventDefault(); const id=e.target.dataset.id; if(!id){$('#editMsg').textContent='Missing profile ID.';return;}
+ const payload={p_listing_id:id,p_name:$('#epn').value.trim(),p_category:$('#epc').value,p_location:$('#epl').value.trim(),p_description:$('#epd').value.trim(),p_phone:$('#epp').value.trim()||null,p_website:$('#epw').value.trim()||null,p_price:$('#eprice').value.trim()||null,p_price_unit:$('#epriceUnit').value.trim()||null,p_service_area:$('#eparea').value.trim()||null};
+ const {data,error}=await maltSupabase.rpc('malt_update_my_listing',payload);
+ if(error||!data){$('#editMsg').textContent=error?.message||'Update failed.';return;}
+ $('#editMsg').textContent='✓ Updated and sent for admin review again.'; setTimeout(()=>location='dashboard.html',800);
+}
+window.editProfile=editProfile;
 async function createProfile(e){
  e.preventDefault(); const {data:{user}}=await maltSupabase.auth.getUser(); if(!user){location='login.html';return}
  const role=await getAccountRole(user); if(role==='admin'){ $('#msg').textContent='Administrators manage listings from the Admin panel.'; return; }
  const allowed={user:['Service Provider','Business','Organization','Community'],business:['Business'],service_provider:['Service Provider'],organization:['Organization']}[role]||['Service Provider'];
  const selected=$('#pt').value; if(!allowed.includes(selected)){ $('#msg').textContent='Your '+roleLabel(role)+' account can only publish: '+allowed.join(', ')+'.'; return; }
- const payload={name:$('#pn').value,category:$('#pc').value,type:selected,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,verified:false,status:'pending',owner_id:user.id};
+ const payload={name:$('#pn').value,category:$('#pc').value,type:selected,location:$('#pl').value,description:$('#pd').value,phone:$('#pp').value||null,website:$('#pw').value||null,price:$('#pprice')?.value.trim()||null,price_unit:$('#ppriceUnit')?.value.trim()||null,service_area:$('#parea')?.value.trim()||null,verified:false,status:'pending',owner_id:user.id};
  const {error}=await maltSupabase.from('listings').insert(payload);
  $('#msg').textContent=error?error.message:'✓ Profile submitted online for admin review.'; if(!error)e.target.reset();
 }
@@ -127,6 +158,7 @@ async function init(){
  if($('#cat')){CATEGORIES.forEach(x=>$('#cat').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));render();$('#searchBtn')?.addEventListener('click',render);['q','loc','cat','type'].forEach(id=>$('#'+id)?.addEventListener('input',render))}
  if($('#profile'))showProfile();
  if($('#createForm')){CATEGORIES.forEach(x=>$('#pc').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));$('#createForm').addEventListener('submit',createProfile);prepareCreateProfile()}
+ if($('#editForm')){CATEGORIES.forEach(x=>$('#epc').insertAdjacentHTML('beforeend',`<option>${esc(x)}</option>`));$('#editForm').addEventListener('submit',editProfile);prepareEditProfile()}
  if($('#loginForm'))$('#loginForm').addEventListener('submit',login);
  if($('#registerForm'))$('#registerForm').addEventListener('submit',register);
  if($('#hello'))dashboard();
