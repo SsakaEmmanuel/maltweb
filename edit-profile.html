@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edit profile — MALTWEB</title><link rel="stylesheet" href="assets/css/app.css"></head><body>
+<header class="nav"><a class="brand" href="index.html">MALT<span>WEB</span></a><nav><a href="discover.html">Discover</a><a href="dashboard.html">Account</a></nav></header>
+<main class="page"><p class="eyebrow">MANAGE YOUR PROFILE</p><h1>Edit profile</h1><div class="card"><span class="pill" id="editRole">Checking account role…</span><p class="muted">Changes go back to <strong>Pending</strong> review so approved information stays trustworthy.</p></div>
+<form id="editForm" class="card form">
+<input id="epn" placeholder="Profile name" required>
+<select id="epc" required><option value="">Choose category</option></select>
+<input id="epl" placeholder="Location" required>
+<textarea id="epd" placeholder="Description" required></textarea>
+<input id="epp" placeholder="Phone">
+<input id="epw" placeholder="Website (optional)">
+<div class="form-grid"><input id="eprice" placeholder="Price / rate (optional)"><input id="epriceUnit" placeholder="Per hour, day, job... (optional)"></div>
+<input id="eparea" placeholder="Service area (e.g. Luwero & nearby) (optional)">
+<button>Save changes</button><p id="editMsg" class="muted"></p>
+</form></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="assets/js/supabase-config.js"></script><script src="assets/js/data.js"></script><script src="assets/js/app.js"></script></body></html>
