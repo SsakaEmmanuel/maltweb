@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Create service — MALTWEB</title><link rel="stylesheet" href="assets/css/app.css"></head><body>
+<header class="nav"><a class="brand" href="index.html">MALT<span>WEB</span></a><nav><a href="discover.html">Discover</a><a href="events.html">Events</a><a href="dashboard.html">Account</a></nav></header>
+<main class="page"><p class="eyebrow">SERVICE PROVIDER WORKSPACE</p><h1>Create a service</h1>
+<div class="card"><span class="pill">Service Provider</span><p class="muted">Publish one service at a time. New services start as <strong>Pending</strong> and become visible after administrator approval.</p></div>
+<form id="serviceForm" class="card form">
+<input id="sn" placeholder="Service name" required>
+<select id="sc" required><option value="">Choose service category</option></select>
+<textarea id="sd" placeholder="Describe what you offer, what customers get, and what makes your service useful." required></textarea>
+<div class="form-grid"><input id="sprice" placeholder="Price / rate (optional)"><input id="spriceUnit" placeholder="Per hour, day, job... (optional)"></div>
+<input id="sl" placeholder="Service location" required>
+<input id="sarea" placeholder="Service area (e.g. Luwero & nearby) (optional)">
+<input id="sp" placeholder="Phone / WhatsApp">
+<input id="sw" placeholder="Website or social link (optional)">
+<button>Submit service for review</button><p id="serviceMsg" class="muted"></p>
+</form></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="assets/js/supabase-config.js"></script><script src="assets/js/data.js"></script><script src="assets/js/app.js"></script></body></html>
