@@ -69,14 +69,24 @@ async function dashboard(){
  if($('#roleIntro'))$('#roleIntro').textContent=intro;
  const adminNav=$('#adminNav');
  if(adminNav) adminNav.hidden=role!=='admin';
- const createNav=$('#createNav'); if(createNav && role==='service_provider'){createNav.textContent='Create service';createNav.href='create-service.html';}
+ const createNav=$('#createNav');
+ if(createNav){
+   if(role==='service_provider'){createNav.textContent='Create service';createNav.href='create-service.html';}
+   else if(role==='business'){createNav.textContent='Create business';createNav.href='create-profile.html';}
+   else if(role==='organization'){createNav.textContent='Create organization';createNav.href='create-profile.html';}
+   else {createNav.textContent='Create profile';createNav.href='create-profile.html';}
+ }
+ if(role==='service_provider'&&$('#providerWorkspace'))$('#providerWorkspace').hidden=false;
+ if(role==='business'&&$('#businessWorkspace'))$('#businessWorkspace').hidden=false;
+ if(role==='organization'&&$('#organizationWorkspace'))$('#organizationWorkspace').hidden=false;
  if($('#roleActions')){
    const links=[];
    if(role!=='admin')links.push('<a class="button" href="discover.html">Discover local options</a>');
    if(role==='service_provider')links.push('<a class="button" href="create-service.html">+ New service</a>');
-   else if(role!=='user'&&role!=='admin')links.push('<a class="button" href="create-profile.html">+ Create '+esc(roleLabel(role))+' profile</a>');
-   if(role==='admin')links.push('<a class="button" href="admin.html">Open admin review</a>');
-   if(role==='user')links.push('<a class="button" href="create-profile.html">+ Create a profile</a>');
+   else if(role==='business')links.push('<a class="button" href="create-profile.html">+ Create business profile</a>');
+   else if(role==='organization')links.push('<a class="button" href="create-profile.html">+ Create organization profile</a>');
+   else if(role==='admin')links.push('<a class="button" href="admin.html">Open admin review</a>');
+   else if(role==='user')links.push('<a class="button" href="create-profile.html">+ Create a profile</a>');
    $('#roleActions').innerHTML=links.join('');
  }
  const {data,error}=await maltSupabase.from('listings').select('*').eq('owner_id',user.id).order('created_at',{ascending:false});
@@ -85,7 +95,14 @@ async function dashboard(){
  if($('#providerStats')){
    const services=mine.filter(x=>x.type==='Service Provider');
    $('#providerStats').innerHTML=`<div class="stat"><strong>${services.length}</strong><span>My services</span></div><div class="stat"><strong>${services.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${services.filter(x=>x.status==='pending').length}</strong><span>Pending</span></div>`;
-   $('#providerWorkspace').hidden=role!=='service_provider';
+ }
+ if($('#businessStats')){
+   const items=mine.filter(x=>x.type==='Business');
+   $('#businessStats').innerHTML=`<div class="stat"><strong>${items.length}</strong><span>Business profiles</span></div><div class="stat"><strong>${items.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${items.filter(x=>x.status==='pending').length}</strong><span>Pending review</span></div>`;
+ }
+ if($('#organizationStats')){
+   const items=mine.filter(x=>x.type==='Organization');
+   $('#organizationStats').innerHTML=`<div class="stat"><strong>${items.length}</strong><span>Organization profiles</span></div><div class="stat"><strong>${items.filter(x=>x.status==='active').length}</strong><span>Active</span></div><div class="stat"><strong>${items.filter(x=>x.status==='pending').length}</strong><span>Pending review</span></div>`;
  }
  $('#myListings').innerHTML=mine.map(x=>`<article class="card"><div class="profile-head"><span class="pill">${esc(x.status)}</span>${x.type==='Service Provider'?`<span class="muted">Service</span>`:''}</div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.category)} · ${esc(x.type)} · ${esc(x.location)}</p>${x.price?`<p><strong>Rate:</strong> ${esc(x.price)}${x.price_unit?' / '+esc(x.price_unit):''}</p>`:''}<div class="actions">${x.status==='active'?`<a class="button" href="profile.html?id=${encodeURIComponent(x.id)}">View public profile</a>`:''}<a class="button secondary" href="edit-profile.html?id=${encodeURIComponent(x.id)}">✎ ${x.type==='Service Provider'?'Edit service':'Edit'}</a><button class="secondary" onclick="deleteMyListing('${x.id}')">Delete</button></div></article>`).join('')||'<div class="card">No submissions yet.</div>';
 }
@@ -167,6 +184,9 @@ async function prepareCreateProfile(){
  if($('#profileRole'))$('#profileRole').textContent=roleLabel(role);
  if($('#profileRoleMsg'))$('#profileRoleMsg').textContent='This account can publish: '+allowed.join(', ')+'.';
  if(select){select.innerHTML=allowed.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');}
+ if(role==='business'){if($('#createTitle'))$('#createTitle').textContent='Create business profile';if($('#createEyebrow'))$('#createEyebrow').textContent='BUSINESS PRESENCE';if($('#createSubmit'))$('#createSubmit').textContent='Submit business profile';}
+ if(role==='organization'){if($('#createTitle'))$('#createTitle').textContent='Create organization profile';if($('#createEyebrow'))$('#createEyebrow').textContent='ORGANIZATION PRESENCE';if($('#createSubmit'))$('#createSubmit').textContent='Submit organization profile';}
+ if(role==='user'){if($('#createTitle'))$('#createTitle').textContent='Create a local profile';}
 }
 async function init(){
 
