@@ -32,6 +32,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var sessionStore: SessionStore
     private var currentSession: AuthSession? = null
     private var entriesJob: Job? = null
+    private var weeklyJob: Job? = null
+    private lateinit var weeklyList: LinearLayout
     private var activeScreen = "home"
 
     private val navy = Color.rgb(18, 35, 61)
@@ -63,7 +65,10 @@ class MainActivity : ComponentActivity() {
 
         if (currentSession == null) showAuth() else showHome()
         observeEntries(currentSession?.userId ?: "local")
-        if (currentSession != null) SyncScheduler.syncNow(this)
+        if (currentSession != null) {
+            observeWeekly(currentSession!!.userId)
+            SyncScheduler.syncNow(this)
+        }
     }
 
     private fun showAuth() {
@@ -230,14 +235,104 @@ class MainActivity : ComponentActivity() {
     private fun showWeekly() {
         activeScreen = "weekly"
         screenHost.removeAllViews()
-        addPageHeader("Weekly reports", "A dedicated space for weekly summaries and review.")
-        val card = panel()
-        card.addView(label("WEEKLY SUMMARY", 12f, blue, true))
-        card.addView(label("Weekly reporting is the next stage.", 19f, navy, true).apply { setPadding(0, dp(8), 0, dp(6)) })
-        card.addView(label("This section is reserved for captured weekly activities, student reflection, supervisor comments and review status. Your existing daily records remain available in Saved records.", 14f, ink))
-        screenHost.addView(card, matchWrap())
+        addPageHeader("Weekly reports", "Capture your week and track supervisor review.")
+
+        val form = panel()
+        form.addView(label("WEEKLY ACTIVITY SUMMARY", 12f, blue, true))
+        form.addView(label("What did you accomplish this week?", 19f, navy, true).apply { setPadding(0, dp(8), 0, dp(4)) })
+        val weekStart = addField(form, "Week starting (Monday, YYYY-MM-DD)", mondayDate(), false)
+        val summaryField = addField(form, "Work completed this week *", "", true)
+        val skillsField = addField(form, "Skills or lessons learned", "", true)
+        val challengesField = addField(form, "Challenges and solutions", "", true)
+        val message = label("", 13f, green).apply { setPadding(0, dp(8), 0, dp(4)) }
+        form.addView(message)
+        form.addView(actionButton("Save weekly summary", blue).apply {
+            setOnClickListener {
+                val startDate = weekStart.text.toString().trim()
+                val summary = summaryField.text.toString().trim()
+                if (!startDate.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}")) || summary.isBlank()) {
+                    message.text = "Enter a valid week-start date and describe the work completed."
+                    message.setTextColor(Color.rgb(170, 55, 40))
+                    return@setOnClickListener
+                }
+                val owner = currentSession?.userId ?: "local"
+                lifecycleScope.launch {
+                    try {
+                        db.weeklies().save(
+                            WeeklySummary(
+                                weekStart = startDate,
+                                summary = summary,
+                                skillsLearned = skillsField.text.toString().trim(),
+                                challenges = challengesField.text.toString().trim(),
+                                ownerUserId = owner
+                            )
+                        )
+                        if (currentSession != null) SyncScheduler.syncNow(this@MainActivity)
+                        summaryField.text.clear()
+                        skillsField.text.clear()
+                        challengesField.text.clear()
+                        message.text = if (currentSession != null) "Saved on this device. Sync has been queued." else "Saved on this device. Sign in to sync it later."
+                        message.setTextColor(green)
+                        Toast.makeText(this@MainActivity, "Weekly summary saved.", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        message.text = e.message ?: "Could not save the weekly summary."
+                        message.setTextColor(Color.rgb(170, 55, 40))
+                    }
+                }
+            }
+        }, matchWrap())
+        screenHost.addView(form, matchWrap())
+
+        val saved = panel()
+        saved.addView(label("SAVED WEEKLY SUMMARIES", 12f, blue, true))
+        saved.addView(label("Review status and supervisor comments appear with each saved report.", 13f, ink).apply { setPadding(0, dp(4), 0, dp(10)) })
+        weeklyList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        saved.addView(weeklyList)
+        screenHost.addView(saved, matchWrap())
         screenHost.addView(actionButton("View saved daily records", blue).apply { setOnClickListener { showRecords() } }, matchWrap())
         screenHost.addView(actionButton("Back to dashboard", navy).apply { setOnClickListener { showHome() } }, matchWrap())
+        observeWeekly(currentSession?.userId ?: "local")
+    }
+
+    private fun observeWeekly(ownerId: String) {
+        weeklyJob?.cancel()
+        weeklyJob = lifecycleScope.launch {
+            db.weeklies().observeAllForOwner(ownerId).collect { summaries ->
+                if (activeScreen != "weekly" || !::weeklyList.isInitialized) return@collect
+                weeklyList.removeAllViews()
+                if (summaries.isEmpty()) {
+                    weeklyList.addView(label("No weekly summaries yet. Your saved reports will appear here.", 13f, ink).apply {
+                        setPadding(0, dp(8), 0, dp(8))
+                    })
+                } else {
+                    summaries.forEachIndexed { index, item ->
+                        val row = LinearLayout(this@MainActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(dp(12), dp(12), dp(12), dp(12))
+                            background = android.graphics.drawable.GradientDrawable().apply {
+                                setColor(if (index % 2 == 0) Color.WHITE else Color.rgb(247, 249, 253))
+                                setStroke(dp(1), Color.rgb(225, 230, 238))
+                                cornerRadius = dp(10).toFloat()
+                            }
+                        }
+                        row.addView(label("Week starting " + item.weekStart, 15f, navy, true))
+                        row.addView(label(item.summary, 13f, ink).apply { setPadding(0, dp(6), 0, dp(5)) })
+                        if (item.skillsLearned.isNotBlank()) row.addView(label("Skills learned: " + item.skillsLearned, 12f, ink))
+                        if (item.challenges.isNotBlank()) row.addView(label("Challenges: " + item.challenges, 12f, ink).apply { setPadding(0, dp(4), 0, 0) })
+                        row.addView(label(if (item.syncStatus == "synced") "SYNCED • Awaiting supervisor review" else "SAVED OFFLINE • Pending sync", 11f, if (item.syncStatus == "synced") green else Color.rgb(174, 105, 20), true).apply {
+                            setPadding(0, dp(8), 0, dp(4))
+                        })
+                        if (item.supervisorComments.isNotBlank()) {
+                            row.addView(label("Supervisor comments: " + item.supervisorComments, 12f, ink))
+                        }
+                        if (!item.supervisorReviewedAt.isNullOrBlank()) {
+                            row.addView(label("Reviewed on " + item.supervisorReviewedAt, 11f, green, true).apply { setPadding(0, dp(5), 0, 0) })
+                        }
+                        weeklyList.addView(row, matchWrap())
+                    }
+                }
+            }
+        }
     }
 
     private fun addPageHeader(title: String, subtitle: String) {
@@ -262,10 +357,12 @@ class MainActivity : ComponentActivity() {
                 currentSession = session
                 withContext(Dispatchers.IO) {
                     db.entries().claimLocalEntries(session.userId)
+                    db.weeklies().claimLocalSummaries(session.userId)
                     SupabaseApi(this@MainActivity).ensureStudentProfile(session, email)
                 }
                 showHome()
                 observeEntries(session.userId)
+                observeWeekly(session.userId)
                 SyncScheduler.syncNow(this@MainActivity)
             } catch (e: Exception) {
                 authMessage.text = e.message ?: "Sign-in failed. Check your connection and account details."
@@ -298,6 +395,7 @@ class MainActivity : ComponentActivity() {
         sessionStore.clear()
         currentSession = null
         observeEntries("local")
+        observeWeekly("local")
         showAuth()
     }
 
@@ -393,6 +491,14 @@ class MainActivity : ComponentActivity() {
         typeface = if (header) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         setTextColor(if (header) Color.WHITE else ink)
         setPadding(dp(8), dp(12), dp(5), dp(12))
+    }
+
+    private fun mondayDate(): String {
+        val calendar = java.util.Calendar.getInstance()
+        val day = calendar.get(java.util.Calendar.DAY_OF_WEEK)
+        val daysSinceMonday = (day + 5) % 7
+        calendar.add(java.util.Calendar.DAY_OF_MONTH, -daysSinceMonday)
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.time)
     }
 
     private fun matchWrap() = LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) }
