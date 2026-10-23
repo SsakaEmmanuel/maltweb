@@ -22,4 +22,7 @@ interface WeeklySummaryDao {
 
     @Query("UPDATE weekly_summaries SET ownerUserId = :userId WHERE ownerUserId = 'local'")
     suspend fun claimLocalSummaries(userId: String)
+
+    @Query("UPDATE weekly_summaries SET supervisorComments = :comments, supervisorReviewedAt = :reviewedAt WHERE ownerUserId = :ownerId AND weekStart = :weekStart")
+    suspend fun updateReview(ownerId: String, weekStart: String, comments: String, reviewedAt: String?)
 }
