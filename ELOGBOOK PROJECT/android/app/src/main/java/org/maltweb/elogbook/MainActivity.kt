@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                             registrationFields.visibility = View.VISIBLE
                             registrationAction.text = "Complete registration"
                             authMessage.text = "Choose your account type and complete your organisation details."
+                            loadOrganizations()
                         } else showHome()
                     }
                 } catch (_: Exception) {
@@ -1052,6 +1053,8 @@ class MainActivity : ComponentActivity() {
     private fun signOut() {
         sessionStore.clear()
         currentSession = null
+        currentProfile = null
+        currentRole = "student"
         observeEntries("local")
         observeWeekly("local")
         showAuth()
