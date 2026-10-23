@@ -19,5 +19,7 @@ data class LogbookEntry(
     val recommendations: String,
     val ownerUserId: String = "local",
     val syncStatus: String = "pending",
+    val supervisorComments: String = "",
+    val supervisorReviewedAt: String? = null,
     val updatedAt: Long = System.currentTimeMillis()
 )
