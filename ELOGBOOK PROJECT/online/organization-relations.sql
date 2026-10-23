@@ -55,15 +55,6 @@ create policy "organization names are discoverable" on public.organizations
   for select to anon, authenticated using (true);
 revoke all on public.organizations from anon, authenticated;
 grant select (id, name) on public.organizations to anon, authenticated;
-drop policy if exists "organization admin updates own organization" on public.organizations;
-create policy "organization admin updates own organization" on public.organizations
-  for update to authenticated
-  using (public.current_logbook_role() = 'organization_admin'
-    and public.current_logbook_organization_id() = organizations.id)
-  with check (public.current_logbook_role() = 'organization_admin'
-    and public.current_logbook_organization_id() = organizations.id);
-grant update (name) on public.organizations to authenticated;
-
 create or replace function public.current_logbook_role()
 returns text language sql stable security definer set search_path = ''
 as $$ select p.role from public.profiles p where p.id = auth.uid() $$;
@@ -84,6 +75,15 @@ grant execute on function public.current_logbook_role() to authenticated;
 grant execute on function public.current_logbook_organization_id() to authenticated;
 grant execute on function public.current_logbook_approval_status() to authenticated;
 grant execute on function public.current_logbook_course() to authenticated;
+
+drop policy if exists "organization admin updates own organization" on public.organizations;
+create policy "organization admin updates own organization" on public.organizations
+  for update to authenticated
+  using (public.current_logbook_role() = 'organization_admin'
+    and public.current_logbook_organization_id() = organizations.id)
+  with check (public.current_logbook_role() = 'organization_admin'
+    and public.current_logbook_organization_id() = organizations.id);
+grant update (name) on public.organizations to authenticated;
 
 create or replace function public.protect_logbook_profile_fields()
 returns trigger language plpgsql security definer set search_path = ''
@@ -260,9 +260,10 @@ grant execute on function public.rotate_logbook_organization_key() to authentica
 
 -- Profile directory: an owner sees self, supervisors see assigned students,
 -- organisations see their members, and students see members of their same course.
+drop policy if exists "profile owner reads own profile" on public.profiles;
+drop policy if exists "assigned supervisor reads assigned student profile" on public.profiles;
 drop policy if exists "owners and assigned supervisors read profiles" on public.profiles;
 drop policy if exists "owners supervisors and organisation read profiles" on public.profiles;
-drop policy if exists "owners and assigned supervisors read profiles" on public.profiles;
 create policy "owners supervisors and organisation read profiles" on public.profiles
   for select to authenticated using (
     id=(select auth.uid())
@@ -274,6 +275,8 @@ create policy "owners supervisors and organisation read profiles" on public.prof
       and organization_id=public.current_logbook_organization_id() and course=public.current_logbook_course())
   );
 
+drop policy if exists "student reads own daily entries" on public.daily_entries;
+drop policy if exists "assigned supervisors read daily entries" on public.daily_entries;
 drop policy if exists "students supervisors and organisation read daily entries" on public.daily_entries;
 create policy "students supervisors and organisation read daily entries" on public.daily_entries
   for select to authenticated using (
@@ -285,6 +288,8 @@ create policy "students supervisors and organisation read daily entries" on publ
       and exists (select 1 from public.profiles student where student.id=daily_entries.student_id
         and student.organization_id=public.current_logbook_organization_id()))
   );
+drop policy if exists "student reads own weekly summaries" on public.weekly_summaries;
+drop policy if exists "assigned supervisors read weekly summaries" on public.weekly_summaries;
 drop policy if exists "students supervisors and organisation read weekly summaries" on public.weekly_summaries;
 create policy "students supervisors and organisation read weekly summaries" on public.weekly_summaries
   for select to authenticated using (
