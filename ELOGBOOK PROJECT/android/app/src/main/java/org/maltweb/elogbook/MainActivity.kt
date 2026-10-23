@@ -140,9 +140,40 @@ class MainActivity : ComponentActivity() {
         val signInButton = actionButton("Sign in", blue)
         signInButton.setOnClickListener { signIn() }
         card.addView(signInButton, matchWrap())
-        val createButton = actionButton("Create student account", navy)
-        createButton.setOnClickListener { signUp() }
-        card.addView(createButton, matchWrap())
+        registrationFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        registrationRole = Spinner(this)
+        registrationRole.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Student", "Field supervisor", "Institution supervisor", "Organisation account"))
+        registrationFields.addView(label("Account type", 13f, ink, true))
+        registrationFields.addView(registrationRole, matchWrap())
+        registrationName = addField(registrationFields, "Full names", "", false)
+        registrationGender = Spinner(this)
+        registrationGender.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
+            listOf("Choose gender", "Female", "Male", "Prefer not to say"))
+        registrationFields.addView(label("Gender", 13f, ink, true).apply { setPadding(0, dp(10), 0, dp(5)) })
+        registrationFields.addView(registrationGender, matchWrap())
+        registrationCourse = addField(registrationFields, "Course / subject", "", false)
+        registrationStudentNumber = addField(registrationFields, "Student / index number", "", false)
+        registrationOrganizationName = addField(registrationFields, "Organisation name (school / institution)", "", false)
+        registrationOrganization = Spinner(this)
+        registrationFields.addView(label("Select your organisation", 13f, ink, true).apply { setPadding(0, dp(10), 0, dp(5)) })
+        registrationFields.addView(registrationOrganization, matchWrap())
+        registrationOrganizationKey = addField(registrationFields, "Organisation key", "", false)
+        registrationRole.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { updateRegistrationVisibility() }
+        }
+        card.addView(registrationFields, matchWrap())
+        registrationAction = actionButton("Create account", navy)
+        registrationAction.setOnClickListener {
+            if (registrationFields.visibility != View.VISIBLE) {
+                registrationFields.visibility = View.VISIBLE
+                registrationAction.text = if (currentSession == null) "Register selected account" else "Complete registration"
+                loadOrganizations()
+                updateRegistrationVisibility()
+            } else signUp()
+        }
+        card.addView(registrationAction, matchWrap())
         authMessage = label("", 13f, green).apply { setPadding(0, dp(10), 0, 0) }
         card.addView(authMessage)
         screenHost.addView(card, matchWrap())
