@@ -104,7 +104,8 @@ WITH CHECK (
 CREATE OR REPLACE FUNCTION public.protect_logbook_review_fields()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+SET search_path = ''
+AS $
 BEGIN
   IF (SELECT auth.uid()) IS NULL THEN
     RETURN NEW;
