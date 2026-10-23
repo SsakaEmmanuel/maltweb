@@ -46,4 +46,4 @@ Use disposable test accounts first:
 
 ## Known remaining work
 - The latest APK compiles successfully, but the complete multi-role flow still needs a real-device end-to-end test using the roles above.
-- PDF/CSV report exports, audit history for attendance corrections/mark adjustments, conflict-resolution UI, password-recovery polish, and a signed production release remain future hardening work.
+- The Android APK must be tested end-to-end on a real device with disposable organisation, supervisor and student accounts before using it for official records. PDF/CSV exports, audit history for attendance corrections/mark adjustments, conflict-resolution UI, password-recovery polish, and a signed production release remain future hardening work.
