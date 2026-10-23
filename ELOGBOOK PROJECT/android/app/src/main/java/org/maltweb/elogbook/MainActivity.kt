@@ -183,6 +183,47 @@ class MainActivity : ComponentActivity() {
         })
     }
 
+    private fun setRegistrationFieldVisible(field: EditText, visible: Boolean) {
+        field.visibility = if (visible) View.VISIBLE else View.GONE
+        val parent = field.parent as? LinearLayout ?: return
+        val index = parent.indexOfChild(field)
+        if (index > 0) parent.getChildAt(index - 1).visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun updateRegistrationVisibility() {
+        if (!::registrationRole.isInitialized) return
+        val role = registrationRole.selectedItemPosition
+        val organizationAccount = role == 3
+        setRegistrationFieldVisible(registrationCourse, !organizationAccount)
+        setRegistrationFieldVisible(registrationStudentNumber, role == 0)
+        setRegistrationFieldVisible(registrationOrganizationName, organizationAccount)
+        registrationOrganization.visibility = if (organizationAccount) View.GONE else View.VISIBLE
+        if (registrationOrganization.parent is LinearLayout) {
+            val parent = registrationOrganization.parent as LinearLayout
+            val index = parent.indexOfChild(registrationOrganization)
+            if (index > 0) parent.getChildAt(index - 1).visibility = if (organizationAccount) View.GONE else View.VISIBLE
+        }
+        setRegistrationFieldVisible(registrationOrganizationKey, !organizationAccount)
+    }
+
+    private fun loadOrganizations() {
+        if (!::registrationOrganization.isInitialized) return
+        lifecycleScope.launch {
+            try {
+                organizations = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchOrganizations() }
+                val names = ArrayList<String>()
+                for (i in 0 until organizations.length()) {
+                    names.add(organizations.optJSONObject(i)?.optString("name") ?: "Organisation")
+                }
+                if (names.isEmpty()) names.add("No organisations registered yet")
+                registrationOrganization.adapter = ArrayAdapter(this@MainActivity,
+                    android.R.layout.simple_spinner_dropdown_item, names)
+            } catch (_: Exception) {
+                if (::authMessage.isInitialized) authMessage.text = "Could not load organisations. Check your connection and try again."
+            }
+        }
+    }
+
     private fun showHome() {
         activeScreen = "home"
         screenHost.setPadding(dp(18), dp(18), dp(18), dp(22))
