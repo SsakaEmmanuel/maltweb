@@ -213,6 +213,26 @@ internal class SupabaseApi(private val context: Context) {
         )
     }
 
+    fun fetchAssignedDailyEntries(session: AuthSession): JSONArray {
+        return request(
+            "GET",
+            "/rest/v1/daily_entries?select=id,student_id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations,supervisor_comments,supervisor_signed_at,student:profiles!daily_entries_student_id_fkey(full_name)&student_id=neq.${session.userId}&order=entry_date.desc&limit=300",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected daily-review response.")
+    }
+
+    fun saveDailyReview(session: AuthSession, entryId: String, comments: String) {
+        val now = java.time.Instant.now().toString()
+        request(
+            "PATCH", "/rest/v1/daily_entries?id=eq.$entryId",
+            JSONObject()
+                .put("supervisor_comments", comments)
+                .put("supervisor_signed_at", now)
+                .put("updated_at", now),
+            token = session.accessToken, prefer = "return=minimal"
+        )
+    }
+
     fun fetchMyWeeklyReviews(session: AuthSession): JSONArray {
         return request(
             "GET",
