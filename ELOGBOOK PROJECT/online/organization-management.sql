@@ -430,6 +430,9 @@ grant select (id, full_name, role, school_name, student_number, created_at, upda
 create index if not exists profiles_organization_course_idx on public.profiles(organization_id, course);
 create index if not exists profiles_organization_role_status_idx on public.profiles(organization_id, role, approval_status);
 create index if not exists organizations_created_by_idx on public.organizations(created_by);
+create index if not exists daily_entries_student_id_idx on public.daily_entries(student_id);
+create index if not exists weekly_summaries_student_id_idx on public.weekly_summaries(student_id);
+create index if not exists supervisor_assignments_student_id_idx on public.supervisor_assignments(student_id);
 create index if not exists attendance_records_student_date_idx on public.attendance_records(student_id, attendance_date desc);
 create index if not exists attendance_records_recorded_by_idx on public.attendance_records(recorded_by);
 create index if not exists performance_marks_student_created_idx on public.performance_marks(student_id, created_at desc);
