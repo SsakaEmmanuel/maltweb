@@ -136,13 +136,18 @@ begin
       encode(extensions.digest(convert_to(v_key,'UTF8'),'sha256'),'hex'), v_user)
     returning id into v_org_id;
   perform pg_catalog.set_config('app.logbook_privileged_registration','on',true);
-  insert into public.profiles(id,full_name,role,organization_id,gender,approval_status,updated_at)
-    values(v_user,trim(p_full_name),'organization_admin',v_org_id,p_gender,'approved',now())
+  insert into public.profiles(id,full_name,role,school_name,organization_id,gender,approval_status,updated_at)
+    values(v_user,trim(p_full_name),'organization_admin',trim(p_organization_name),v_org_id,p_gender,'approved',now())
     on conflict (id) do update set full_name=excluded.full_name, role='organization_admin',
-      organization_id=v_org_id, gender=excluded.gender, approval_status='approved', updated_at=now();
+      school_name=excluded.school_name, organization_id=v_org_id, gender=excluded.gender,
+      approval_status='approved', updated_at=now();
   return query select v_org_id,v_key;
 end;
-$$;
+$;
+
+update public.profiles p set school_name=o.name
+from public.organizations o
+where p.organization_id=o.id and p.role='organization_admin' and p.school_name is null;
 
 create or replace function public.register_logbook_member(
   p_full_name text, p_role text, p_gender text, p_course text,
