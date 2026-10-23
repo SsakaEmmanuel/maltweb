@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
     private val navy = Color.rgb(18, 35, 61)
     private val blue = Color.rgb(39, 91, 166)
     private val gold = Color.rgb(229, 169, 52)
-    private val background = Color.rgb(244, 247, 252)
+    private val pageBackground = Color.rgb(244, 247, 252)
     private val ink = Color.rgb(36, 51, 72)
     private val green = Color.rgb(32, 118, 82)
 
@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(background)
+            setBackgroundColor(pageBackground)
         }
         screenHost = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
