@@ -2,6 +2,7 @@ package org.maltweb.elogbook
 
 import androidx.activity.ComponentActivity
 import android.os.Bundle
+import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.View
@@ -234,7 +235,11 @@ class MainActivity : ComponentActivity() {
         }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("E-LOGBOOK", 12f, blue, true))
-        titles.addView(label(if (currentRole == "field_supervisor" || currentRole == "institution_supervisor") "Supervisor workspace" else "Student workspace", 24f, navy, true))
+        titles.addView(label(when (currentRole) {
+            "organization_admin" -> "Organisation workspace"
+            "field_supervisor", "institution_supervisor" -> "Supervisor workspace"
+            else -> "Student workspace"
+        }, 24f, navy, true))
         top.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(actionButton("Sign out", navy).apply { setOnClickListener { signOut() } })
         screenHost.addView(top)
@@ -260,12 +265,36 @@ class MainActivity : ComponentActivity() {
         accountCard.addView(sync, matchWrap())
         screenHost.addView(accountCard, matchWrap())
 
-        screenHost.addView(label("YOUR LOGBOOK", 12f, blue, true).apply { setPadding(0, dp(22), 0, dp(10)) })
-        addNavigationCard("＋", "New daily record", "Capture today's work, tools and skills", "entry")
-        addNavigationCard("▤", "Saved records", "View your daily entries in a table", "records")
-        addNavigationCard("▦", "Weekly reports", "Weekly summaries and supervisor review", "weekly")
-        if (currentRole == "field_supervisor" || currentRole == "institution_supervisor") {
-            addNavigationCard("✓", "Supervisor reviews", "Review weekly reports from assigned students", "reviews")
+        if (currentRole in listOf("field_supervisor", "institution_supervisor") &&
+            currentProfile?.optString("approval_status", "approved") != "approved") {
+            screenHost.addView(panel().apply {
+                addView(label("Awaiting organisation approval", 18f, navy, true))
+                addView(label("Your organisation must approve this account before reviews, attendance or marks become available.", 13f, ink))
+            }, matchWrap())
+            return
+        }
+        when (currentRole) {
+            "organization_admin" -> {
+                screenHost.addView(label("ORGANISATION MANAGEMENT", 12f, blue, true).apply { setPadding(0, dp(22), 0, dp(10)) })
+                addNavigationCard("▦", "Organisation dashboard", "Approve supervisors, link students, view reports and award marks", "organization")
+            }
+            "field_supervisor", "institution_supervisor" -> {
+                screenHost.addView(label("SUPERVISOR TOOLS", 12f, blue, true).apply { setPadding(0, dp(22), 0, dp(10)) })
+                addNavigationCard("✓", "Supervisor reviews", "Review weekly reports from assigned students", "reviews")
+                addNavigationCard("★", "Attendance and marks", "Record attendance and award performance marks", "supervisorTools")
+            }
+            "unregistered" -> {
+                screenHost.addView(label("Finish registering to access your workspace.", 14f, ink))
+                screenHost.addView(actionButton("Complete registration", blue).apply {
+                    setOnClickListener { showAuth(); registrationFields.visibility = View.VISIBLE; registrationAction.text = "Complete registration"; loadOrganizations() }
+                }, matchWrap())
+            }
+            else -> {
+                screenHost.addView(label("YOUR LOGBOOK", 12f, blue, true).apply { setPadding(0, dp(22), 0, dp(10)) })
+                addNavigationCard("＋", "New daily record", "Capture today's work, tools and skills", "entry")
+                addNavigationCard("▤", "Saved records", "View your daily entries in a table", "records")
+                addNavigationCard("▦", "Weekly reports", "Weekly summaries and supervisor review", "weekly")
+            }
         }
     }
 
@@ -290,6 +319,8 @@ class MainActivity : ComponentActivity() {
             "records" -> showRecords()
             "weekly" -> showWeekly()
             "reviews" -> showSupervisorReviews()
+            "organization" -> showOrganizationWorkspace()
+            "supervisorTools" -> showSupervisorTools()
         } }
         screenHost.addView(card, matchWrap())
     }
