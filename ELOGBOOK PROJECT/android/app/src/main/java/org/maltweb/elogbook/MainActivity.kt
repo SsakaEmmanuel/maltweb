@@ -584,20 +584,113 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun signUp() {
+        val fullName = registrationName.text.toString().trim()
+        val role = when (registrationRole.selectedItemPosition) {
+            1 -> "field_supervisor"
+            2 -> "institution_supervisor"
+            3 -> "organization_admin"
+            else -> "student"
+        }
+        val gender = when (registrationGender.selectedItemPosition) {
+            1 -> "female"
+            2 -> "male"
+            3 -> "prefer_not_to_say"
+            else -> ""
+        }
+        val course = registrationCourse.text.toString().trim()
+        val studentNumber = registrationStudentNumber.text.toString().trim()
+        val organizationName = registrationOrganizationName.text.toString().trim()
+        val organizationKey = registrationOrganizationKey.text.toString().trim()
+        val organizationId = if (registrationOrganization.selectedItemPosition in 0 until organizations.length()) {
+            organizations.optJSONObject(registrationOrganization.selectedItemPosition)?.optString("id").orEmpty()
+        } else ""
+        if (fullName.isBlank() || gender.isBlank()) {
+            authMessage.text = "Enter your full names and choose a gender."
+            return
+        }
+        if (role == "student" && (course.isBlank() || studentNumber.isBlank())) {
+            authMessage.text = "Students must enter their course and student/index number."
+            return
+        }
+        if ((role == "field_supervisor" || role == "institution_supervisor") && course.isBlank()) {
+            authMessage.text = "Enter the course or subject you supervise."
+            return
+        }
+        if (role == "organization_admin" && organizationName.isBlank()) {
+            authMessage.text = "Enter your school or institution name."
+            return
+        }
+        if (role != "organization_admin" && (organizationId.isBlank() || organizationKey.isBlank())) {
+            authMessage.text = "Choose your organisation and enter its key."
+            return
+        }
         val email = emailField.text.toString().trim()
         val password = passwordField.text.toString()
-        if (email.isBlank() || password.length < 6) {
+        if (currentSession == null && (email.isBlank() || password.length < 6)) {
             authMessage.text = "Enter a valid email and password with at least 6 characters."
             return
         }
-        authMessage.text = "Creating account…"
+        authMessage.text = "Submitting registration…"
         lifecycleScope.launch {
             try {
-                withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).signUp(email, password) }
-                authMessage.text = "Account request submitted. Check your email for a confirmation link if required, then sign in."
-                authMessage.setTextColor(green)
+                if (currentSession == null) {
+                    val metadata = JSONObject().put("full_name", fullName).put("role", role).put("gender", gender)
+                        .put("course", course).put("student_number", studentNumber)
+                        .put("organization_name", organizationName).put("organization_id", organizationId)
+                    val response = withContext(Dispatchers.IO) {
+                        SupabaseApi(this@MainActivity).signUp(email, password, metadata)
+                    }
+                    val user = response.optJSONObject("user")
+                    val access = response.optString("access_token")
+                    val refresh = response.optString("refresh_token")
+                    if (user != null && access.isNotBlank() && refresh.isNotBlank()) {
+                        val expiry = response.optLong("expires_at", System.currentTimeMillis() / 1000 + response.optLong("expires_in", 3600))
+                        currentSession = AuthSession(user.getString("id"), access, refresh,
+                            java.util.concurrent.TimeUnit.SECONDS.toMillis(expiry), email)
+                        sessionStore.save(currentSession!!)
+                    } else {
+                        authMessage.text = "Account created. Confirm your email, then sign in and complete registration. Keep your organisation key ready."
+                        authMessage.setTextColor(green)
+                        return@launch
+                    }
+                }
+                val session = currentSession ?: throw java.io.IOException("Sign in before completing registration.")
+                withContext(Dispatchers.IO) {
+                    val api = SupabaseApi(this@MainActivity)
+                    val fresh = api.ensureFreshSession(session)
+                    if (role == "organization_admin") {
+                        val result = api.createOrganization(fresh, fullName, organizationName, gender)
+                            ?: throw java.io.IOException("The organisation service did not return a key.")
+                        getSharedPreferences("elogbook_org_keys", MODE_PRIVATE).edit()
+                            .putString(result.optString("organization_id"), result.optString("organization_key")).apply()
+                        currentSession = fresh
+                        sessionStore.save(fresh)
+                        getSharedPreferences("elogbook_org_keys", MODE_PRIVATE).edit()
+                            .putString("new_key", result.optString("organization_key")).apply()
+                    } else {
+                        api.registerMember(fresh, fullName, role, gender, course, studentNumber, organizationId, organizationKey)
+                        currentSession = fresh
+                        sessionStore.save(fresh)
+                    }
+                }
+                currentProfile = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchProfile(currentSession!!) }
+                currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
+                showHome()
+                observeEntries(currentSession!!.userId)
+                observeWeekly(currentSession!!.userId)
+                SyncScheduler.syncNow(this@MainActivity)
+                if (role == "organization_admin") {
+                    val key = getSharedPreferences("elogbook_org_keys", MODE_PRIVATE).getString("new_key", "")
+                    AlertDialog.Builder(this@MainActivity).setTitle("Organisation registered")
+                        .setMessage("Save this organisation key and share it only with verified members:\n\n" + key)
+                        .setPositiveButton("I saved it", null).show()
+                } else if (currentProfile?.optString("approval_status") == "pending") {
+                    AlertDialog.Builder(this@MainActivity).setTitle("Registration submitted")
+                        .setMessage("Your organisation must approve your supervisor account before you can access student records.")
+                        .setPositiveButton("OK", null).show()
+                }
             } catch (e: Exception) {
-                authMessage.text = e.message ?: "Could not create account. Please try again."
+                authMessage.text = e.message ?: "Could not complete registration."
                 authMessage.setTextColor(Color.rgb(170, 55, 40))
             }
         }
