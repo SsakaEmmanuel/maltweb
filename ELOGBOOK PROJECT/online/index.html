@@ -28,7 +28,14 @@
     <label>Recommendations<textarea id="recommendations" rows="2" maxlength="4000"></textarea></label>
     <div class="actions"><button type="submit">Save daily entry</button><button type="button" id="refresh" class="secondary">Refresh records</button></div>
   </form><p id="entryMessage" class="message" role="status"></p></section>
-  <section class="panel"><div class="section-head"><h2>Recent entries</h2><span id="recordHint" class="muted">Your records only</span></div><div id="entries" class="entries"><p class="muted">No entries loaded yet.</p></div></section>
+  <section class="panel"><h2>Weekly summary</h2><p class="muted">Summarize your activities for the week. Your supervisor can review the saved summary.</p><form id="weeklyForm">
+    <div class="two"><label>Week starting (Monday)<input id="weekStart" type="date" required></label><label>Skills learned<textarea id="weeklySkills" rows="2" maxlength="4000"></textarea></label></div>
+    <label>Summary of work completed<textarea id="weeklySummary" rows="4" required maxlength="8000"></textarea></label>
+    <label>Challenges and solutions<textarea id="weeklyChallenges" rows="3" maxlength="4000"></textarea></label>
+    <div class="actions"><button type="submit">Save weekly summary</button><button type="button" id="refreshWeekly" class="secondary">Refresh summaries</button></div>
+  </form><p id="weeklyMessage" class="message" role="status"></p></section>
+  <section class="panel"><div class="section-head"><h2>Saved weekly summaries</h2><span class="muted">Student entries and review status</span></div><div id="weeklyEntries" class="entries"><p class="muted">No summaries loaded yet.</p></div></section>
+  <section class="panel"><div class="section-head"><h2>Recent daily entries</h2><span id="recordHint" class="muted">Your records only</span></div><div id="entries" class="entries"><p class="muted">No entries loaded yet.</p></div></section>
 </section>
 <footer>Keep your records accurate and ask your supervisor to review them regularly.</footer>
 </main>
