@@ -105,10 +105,17 @@ CREATE OR REPLACE FUNCTION public.protect_logbook_review_fields()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = ''
-AS $
+AS $$
 BEGIN
   IF (SELECT auth.uid()) IS NULL THEN
     RETURN NEW;
+  END IF;
+
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.student_id IS DISTINCT FROM OLD.student_id
+     OR NEW.placement_id IS DISTINCT FROM OLD.placement_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'Report identity and ownership cannot be changed.';
   END IF;
 
   IF (SELECT auth.uid()) = OLD.student_id THEN
