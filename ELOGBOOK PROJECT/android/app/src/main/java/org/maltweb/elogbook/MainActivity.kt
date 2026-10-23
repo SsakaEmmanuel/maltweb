@@ -295,6 +295,7 @@ class MainActivity : ComponentActivity() {
                 addNavigationCard("＋", "New daily record", "Capture today's work, tools and skills", "entry")
                 addNavigationCard("▤", "Saved records", "View your daily entries in a table", "records")
                 addNavigationCard("▦", "Weekly reports", "Weekly summaries and supervisor review", "weekly")
+                addNavigationCard("★", "Performance and rankings", "View attendance, marks and course ranking", "performance")
             }
         }
     }
@@ -319,6 +320,7 @@ class MainActivity : ComponentActivity() {
             "entry" -> showEntry()
             "records" -> showRecords()
             "weekly" -> showWeekly()
+            "performance" -> showStudentPerformance()
             "reviews" -> showSupervisorReviews()
             "organization" -> showOrganizationWorkspace()
             "supervisorTools" -> showSupervisorTools()
