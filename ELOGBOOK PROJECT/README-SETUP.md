@@ -40,3 +40,34 @@ GitHub Actions builds a debug APK and uploads it as an artifact. Open **Actions 
 
 ## Scope still to complete
 The initial native sync worker currently handles daily entries. Weekly summaries, placements, supervisor approvals/reviews, signatures, PDF exports, and conflict-resolution UI remain follow-up work. Public sign-up is fixed to the student role; supervisor/admin roles require trusted provisioning before their policies and screens are enabled. This is a debug build, not a signed production release.
+
+## Weekly reports and supervisor review
+
+Weekly summaries are available from the web portal and the Android app. The Android app saves weekly summaries locally first and queues online synchronization; supervisor review comments and reviewed status are refreshed during sync.
+
+The assigned-supervisor review permissions are enabled in the dedicated project and documented in `online/supervisor-review.sql`. The review queue shows only weekly reports belonging to students explicitly assigned to the signed-in supervisor. The database blocks student accounts from modifying supervisor comments/signatures and clears an existing review if a student edits the reviewed report's content.
+
+### Trusted supervisor setup (one time per supervisor)
+
+1. Let the supervisor create and confirm a normal account through the E-Logbook sign-up page.
+2. In the Supabase dashboard for the **E-Logbook** project, open the SQL Editor. A trusted database administrator must change the supervisor's profile role and create the assignment; public users cannot grant themselves supervisor roles.
+3. Use a statement pattern like the following, replacing the email addresses with the real accounts:
+
+```sql
+-- Promote only an account you have verified belongs to this supervisor.
+update public.profiles
+set role = 'field_supervisor'
+where id = (select id from auth.users where email = 'field.supervisor@example.com');
+
+-- Link that supervisor to one specific student.
+insert into public.supervisor_assignments (student_id, supervisor_id, assignment_type)
+select student_profile.id, supervisor_profile.id, 'field_supervisor'
+from public.profiles student_profile
+cross join public.profiles supervisor_profile
+where student_profile.id = (select id from auth.users where email = 'student@example.com')
+  and supervisor_profile.id = (select id from auth.users where email = 'field.supervisor@example.com');
+```
+
+For an institution supervisor, use role and assignment type `institution_supervisor`. Create one assignment row per student/supervisor relationship. Do not grant the role from public sign-up, and do not place service-role keys in the app or website.
+
+Once a supervisor role and assignment exist, the web portal and updated Android app display the **Supervisor reviews** queue. Review updates save comments and the review timestamp; the student's app picks them up on its next successful sync. The actual review/sign-off flow still needs a real assigned supervisor account to be tested end-to-end.
