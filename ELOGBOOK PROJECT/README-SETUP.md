@@ -1,32 +1,42 @@
-# Independent E-Logbook — setup notes
+# Independent E-Logbook
 
-This system is separate from the MALTWEB listings database. Existing paper-style forms are preserved while this first online portal is added alongside them.
+This folder contains the E-Logbook web portal and native Android app source. The old paper-style forms are retained in the existing folders.
 
-## Online portal address
+## Online portal
+After the repository's GitHub Pages deployment finishes, open:
+`https://ssakaemmanuel.github.io/maltweb/ELOGBOOK%20PROJECT/online/index.html`
 
-After GitHub Pages publishes the repository, the portal should be available at: `https://ssakaemmanuel.github.io/maltweb/ELOGBOOK%20PROJECT/online/`.
+The portal is static HTML/CSS/JavaScript. GitHub Pages does not execute PHP.
 
-## 1. Database already created
+## Dedicated online database
+A separate project named **E-Logbook** is already created in the MALTWEB Supabase organization (Frankfurt region).
+- Project ref: `qjzftbgahxkolljpmkmn`
+- Project URL: `https://qjzftbgahxkolljpmkmn.supabase.co`
+- Schema and initial row-level security policies have been applied and verified.
+- Authenticated Data API grants and supporting foreign-key indexes have been applied.
 
-A dedicated project named **E-Logbook** has been created in the MALTWEB Supabase organization in the Frankfurt region. The initial five-table schema and row-level security policies have been applied and checked. The website config uses the public publishable key; no service-role key is exposed.
+The website and Android app use only the public publishable key. Do not add a service-role/secret key to GitHub.
 
-## 2. Database setup reference
-1. Create a **new Supabase project specifically for E-Logbook**. Do not use the MALTWEB project.
-2. In that new project's SQL Editor, run the complete file `online/schema.sql`.
-3. Copy the project's Project URL and publishable key (or legacy anon key) into `online/config.js`.
-4. Never place a service-role/secret key in the website or Android app.
-5. Configure email confirmation and password-reset settings before real student use.
+## Authentication settings to review
+In the Supabase dashboard, open **Authentication → URL Configuration** and set the Site URL to the GitHub Pages portal URL above. Add any additional confirmation/reset redirect URLs you intend to use. Under **Authentication → Sign In / Providers → Email**, review whether email confirmation is required. The apps handle the confirmation-required flow by asking the student to check their inbox and sign in after confirming.
 
-The starter SQL limits student records to the authenticated student. Supervisor/admin role provisioning and supervisor review policies must be completed before those features are opened; never let a public sign-up form choose privileged roles.
+## Native Android
+Open `android/` in Android Studio with JDK 17. The app includes:
+- Student email sign-up and sign-in.
+- AES/GCM encrypted session storage backed by Android Keystore.
+- Room local storage so daily entries can be created offline and survive restarts.
+- WorkManager one-time and periodic network-constrained sync for daily entries.
+- Pending entries remain local until the server accepts their upload.
 
-## 2. Online website
-The web portal is in `online/`. It is static HTML/JS and can be served by GitHub Pages. It requires the dedicated project configuration and the schema above before authentication and saving can work. GitHub Pages does not execute PHP.
+GitHub Actions builds a debug APK and uploads it as an artifact. Open **Actions → E-Logbook Android build → latest successful run → Artifacts** to download it.
 
-## 3. Android app — next implementation stage
-The native app should use Kotlin, Room for local offline entries, and WorkManager for retryable synchronization. A local entry should have a UUID and pending/synced state; upload must be idempotent and must never discard unsynced entries. First online sign-in is required before offline use can be enabled. Keep the local database and online tables aligned.
+## How to test end-to-end
+1. Confirm the URL and Email settings above.
+2. Open the portal and create a test student account with an email inbox you can access.
+3. Confirm the email if prompted, sign in, and save a daily work entry.
+4. On the Android app, sign in with the same student account and tap **Sync now**; the daily entry should upload, while entries added offline should stay marked pending until connectivity returns.
+5. Save a fresh daily entry on Android, wait for it to show **SYNCED**, then refresh the online portal and verify it appears.
+6. Test with a disposable account before entering real student data.
 
-## 4. Current limitations
-- This is a first working portal foundation, not a completed replacement for every old form.
-- Offline entry creation is a native Android feature and is not implemented by this web portal.
-- Supervisor assignments, approvals, evaluations, PDF export, and conflict-resolution screens are planned follow-up work.
-- Test using a dedicated project and test accounts before adding real student records.
+## Scope still to complete
+The initial native sync worker currently handles daily entries. Weekly summaries, placements, supervisor approvals/reviews, signatures, PDF exports, and conflict-resolution UI remain follow-up work. Public sign-up is fixed to the student role; supervisor/admin roles require trusted provisioning before their policies and screens are enabled. This is a debug build, not a signed production release.
