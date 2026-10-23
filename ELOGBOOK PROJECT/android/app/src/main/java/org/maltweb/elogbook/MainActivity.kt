@@ -658,6 +658,86 @@ class MainActivity : ComponentActivity() {
         parent.addView(horizontal, matchWrap())
     }
 
+    private fun showStudentPerformance() {
+        activeScreen = "performance"
+        screenHost.removeAllViews()
+        addPageHeader("Performance and rankings", "Track your attendance, awarded marks and position in your course.")
+        val session = currentSession
+        val profile = currentProfile
+        if (session == null || profile == null) {
+            screenHost.addView(label("Please sign in to view your performance.", 14f, ink))
+            return
+        }
+        val organizationId = profile.optString("organization_id")
+        val course = profile.optString("course")
+        if (organizationId.isBlank() || course.isBlank()) {
+            screenHost.addView(label("Complete your organisation and course details to see your course ranking.", 14f, ink))
+            return
+        }
+        val rankingCard = panel()
+        rankingCard.addView(label("COURSE PERFORMANCE RANKING", 12f, blue, true))
+        rankingCard.addView(label("Organisation course: " + course, 13f, ink).apply { setPadding(0, dp(4), 0, dp(8)) })
+        rankingCard.addView(label("Loading marks and attendance…", 13f, ink))
+        screenHost.addView(rankingCard, matchWrap())
+        lifecycleScope.launch {
+            try {
+                val data = withContext(Dispatchers.IO) {
+                    val api = SupabaseApi(this@MainActivity)
+                    val fresh = api.ensureFreshSession(session)
+                    val students = api.fetchCourseStudents(fresh, organizationId, course)
+                    val studentIds = ArrayList<String>()
+                    for (i in 0 until students.length()) {
+                        studentIds.add(students.getJSONObject(i).optString("id"))
+                    }
+                    val marks = api.fetchOrganizationMarks(fresh, studentIds)
+                    val attendance = api.fetchAttendanceForStudents(fresh, listOf(session.userId))
+                    Triple(students, marks, attendance)
+                }
+                rankingCard.removeAllViews()
+                rankingCard.addView(label("COURSE PERFORMANCE RANKING", 12f, blue, true))
+                val students = data.first
+                val marks = data.second
+                val attendance = data.third
+                if (students.length() == 0) {
+                    rankingCard.addView(label("No other student records are available in this course yet.", 14f, ink))
+                } else {
+                    val scores = HashMap<String, MutableList<Double>>()
+                    for (i in 0 until marks.length()) {
+                        val mark = marks.getJSONObject(i)
+                        val id = mark.optString("student_id")
+                        val score = mark.optDouble("score", Double.NaN)
+                        if (!score.isNaN()) scores.getOrPut(id) { mutableListOf() }.add(score)
+                    }
+                    val sorted = ArrayList<JSONObject>()
+                    for (i in 0 until students.length()) sorted.add(students.getJSONObject(i))
+                    sorted.sortByDescending { person ->
+                        val values = scores[person.optString("id")].orEmpty()
+                        if (values.isEmpty()) -1.0 else values.average()
+                    }
+                    val rows = sorted.mapIndexed { index, person ->
+                        val id = person.optString("id")
+                        val values = scores[id].orEmpty()
+                        val avg = if (values.isEmpty()) "No marks" else String.format(Locale.US, "%.1f", values.average())
+                        listOf((index + 1).toString(), person.optString("full_name") + if (id == session.userId) " (You)" else "", values.size.toString(), avg)
+                    }
+                    addDataTable(rankingCard, listOf("Rank", "Student", "Marks", "Average /100"), rows)
+                }
+                val attendanceCard = panel()
+                attendanceCard.addView(label("MY ATTENDANCE", 12f, blue, true))
+                val attendanceRows = ArrayList<List<String>>()
+                for (i in 0 until attendance.length()) {
+                    val item = attendance.getJSONObject(i)
+                    attendanceRows.add(listOf(item.optString("attendance_date"), item.optString("status"), item.optString("remarks")))
+                }
+                addDataTable(attendanceCard, listOf("Date", "Status", "Remarks"), attendanceRows)
+                screenHost.addView(attendanceCard, matchWrap())
+            } catch (e: Exception) {
+                rankingCard.removeAllViews()
+                rankingCard.addView(label("Could not load course performance: " + (e.message ?: "Check your connection and account setup."), 13f, Color.rgb(170, 55, 40)))
+            }
+        }
+    }
+
     private fun showOrganizationWorkspace() {
         activeScreen = "organization"
         screenHost.removeAllViews()
