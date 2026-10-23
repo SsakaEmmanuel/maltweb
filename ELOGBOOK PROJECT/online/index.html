@@ -20,6 +20,7 @@
 <section id="appPanel" hidden>
   <div class="welcome"><div><p class="eyebrow">STUDENT WORKSPACE</p><h1>Your logbook</h1><p class="muted">Records save to the online database when configured and connected.</p></div><button id="signOut" class="secondary">Sign out</button></div>
   <div class="stats"><div class="stat"><span>Daily records</span><strong id="dailyCount">0</strong></div><div class="stat"><span>Sync status</span><strong id="syncState">Online</strong></div></div>
+  <div id="studentPanel">
   <section class="panel"><h2>Daily work entry</h2><form id="entryForm">
     <div class="two"><label>Date<input id="entryDate" type="date" required></label><label>Tools / equipment used<input id="toolsUsed" maxlength="200"></label></div>
     <label>Work done today<textarea id="workDone" rows="4" required maxlength="8000"></textarea></label>
@@ -36,6 +37,13 @@
   </form><p id="weeklyMessage" class="message" role="status"></p></section>
   <section class="panel"><div class="section-head"><h2>Saved weekly summaries</h2><span class="muted">Student entries and review status</span></div><div id="weeklyEntries" class="entries"><p class="muted">No summaries loaded yet.</p></div></section>
   <section class="panel"><div class="section-head"><h2>Recent daily entries</h2><span id="recordHint" class="muted">Your records only</span></div><div id="entries" class="entries"><p class="muted">No entries loaded yet.</p></div></section>
+  </div>
+  <section id="supervisorPanel" class="panel" hidden>
+    <div class="section-head"><div><p class="eyebrow">SUPERVISOR WORKSPACE</p><h2>Weekly report review queue</h2></div><button type="button" id="refreshReviews" class="secondary">Refresh</button></div>
+    <p class="muted">Review only reports for students assigned to your supervisor account. Add comments and mark a report reviewed.</p>
+    <p id="reviewMessage" class="message" role="status"></p>
+    <div id="reviewQueue" class="entries"><p class="muted">Loading assigned reports…</p></div>
+  </section>
 </section>
 <footer>Keep your records accurate and ask your supervisor to review them regularly.</footer>
 </main>
