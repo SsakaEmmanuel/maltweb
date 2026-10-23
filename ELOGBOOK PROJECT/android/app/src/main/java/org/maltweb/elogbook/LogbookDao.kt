@@ -11,6 +11,9 @@ interface LogbookDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(entry: LogbookEntry)
 
+    @Query("SELECT * FROM daily_entries WHERE ownerUserId = :ownerId AND entryDate = :entryDate LIMIT 1")
+    suspend fun findByOwnerAndDate(ownerId: String, entryDate: String): LogbookEntry?
+
     @Query("SELECT * FROM daily_entries WHERE ownerUserId = :ownerId ORDER BY entryDate DESC, updatedAt DESC")
     fun observeAllForOwner(ownerId: String): Flow<List<LogbookEntry>>
 
