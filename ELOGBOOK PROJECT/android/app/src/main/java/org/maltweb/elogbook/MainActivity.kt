@@ -1083,13 +1083,30 @@ class MainActivity : ComponentActivity() {
                 }
                 currentProfile = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchProfile(session) }
                 currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
-                if (currentRole == "unregistered") {
+                val needsOrganization = currentRole == "student" &&
+                    currentProfile?.optString("organization_id").isNullOrBlank()
+                if (currentRole == "unregistered" || needsOrganization) {
                     showAuth()
                     registrationFields.visibility = View.VISIBLE
                     registrationAction.text = "Complete registration"
-                    authMessage.text = "Sign-in succeeded. Complete your organisation and account details below."
+                    if (needsOrganization) {
+                        registrationRole.setSelection(0)
+                        registrationName.setText(currentProfile?.optString("full_name").orEmpty())
+                        registrationCourse.setText(currentProfile?.optString("course").orEmpty())
+                        registrationStudentNumber.setText(currentProfile?.optString("student_number").orEmpty())
+                        registrationGender.setSelection(when (currentProfile?.optString("gender")) {
+                            "female" -> 1
+                            "male" -> 2
+                            "prefer_not_to_say" -> 3
+                            else -> 0
+                        })
+                        authMessage.text = "This account is not linked to an organisation yet. Complete the details below to connect it."
+                    } else {
+                        authMessage.text = "Sign-in succeeded. Complete your organisation and account details below."
+                    }
                     authMessage.setTextColor(green)
                     loadOrganizations()
+                    updateRegistrationVisibility()
                 } else {
                     showHome()
                     observeEntries(session.userId)
