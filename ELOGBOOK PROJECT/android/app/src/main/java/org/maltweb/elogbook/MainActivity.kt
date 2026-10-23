@@ -560,15 +560,22 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.IO) {
                     db.entries().claimLocalEntries(session.userId)
                     db.weeklies().claimLocalSummaries(session.userId)
-                    SupabaseApi(this@MainActivity).ensureStudentProfile(session, email)
                 }
-                currentRole = withContext(Dispatchers.IO) {
-                    SupabaseApi(this@MainActivity).fetchProfileRole(session)
+                currentProfile = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchProfile(session) }
+                currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
+                if (currentRole == "unregistered") {
+                    showAuth()
+                    registrationFields.visibility = View.VISIBLE
+                    registrationAction.text = "Complete registration"
+                    authMessage.text = "Sign-in succeeded. Complete your organisation and account details below."
+                    authMessage.setTextColor(green)
+                    loadOrganizations()
+                } else {
+                    showHome()
+                    observeEntries(session.userId)
+                    observeWeekly(session.userId)
+                    SyncScheduler.syncNow(this@MainActivity)
                 }
-                showHome()
-                observeEntries(session.userId)
-                observeWeekly(session.userId)
-                SyncScheduler.syncNow(this@MainActivity)
             } catch (e: Exception) {
                 authMessage.text = e.message ?: "Sign-in failed. Check your connection and account details."
                 authMessage.setTextColor(Color.rgb(170, 55, 40))
