@@ -41,7 +41,7 @@
   $("signUp").addEventListener("click", async () => {
     if (!client) return;
     $("signUp").disabled = true; say("authMessage","Creating account…");
-    const {data,error} = await client.auth.signUp({email:$("email").value.trim(),password:$("password").value});
+    const {data,error} = await client.auth.signUp({email:$("email").value.trim(),password:$("password").value,options:{emailRedirectTo:window.location.origin+window.location.pathname}});
     $("signUp").disabled = false;
     if (error) say("authMessage",error.message);
     else if (!data.session) say("authMessage","Account created. Check your email to confirm it, then sign in.",true);
