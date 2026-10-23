@@ -23,6 +23,9 @@ interface LogbookDao {
     @Query("UPDATE daily_entries SET ownerUserId = :userId WHERE ownerUserId = 'local'")
     suspend fun claimLocalEntries(userId: String)
 
+    @Query("UPDATE daily_entries SET supervisorComments = :comments, supervisorReviewedAt = :reviewedAt WHERE ownerUserId = :ownerId AND entryDate = :entryDate")
+    suspend fun updateReview(ownerId: String, entryDate: String, comments: String, reviewedAt: String?)
+
     @Query("SELECT COUNT(*) FROM daily_entries WHERE syncStatus = 'pending' AND ownerUserId = :ownerId")
     fun pendingCount(ownerId: String): Flow<Int>
 }
