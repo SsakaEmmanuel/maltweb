@@ -64,7 +64,28 @@ class MainActivity : ComponentActivity() {
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
 
-        if (currentSession == null) showAuth() else showHome()
+        if (currentSession == null) {
+            showAuth()
+        } else {
+            showHome()
+            val restoredSession = currentSession!!
+            lifecycleScope.launch {
+                try {
+                    val roleResult = withContext(Dispatchers.IO) {
+                        val api = SupabaseApi(this@MainActivity)
+                        val fresh = api.ensureFreshSession(restoredSession)
+                        api.ensureStudentProfile(fresh, restoredSession.email)
+                        Pair(fresh, api.fetchProfileRole(fresh))
+                    }
+                    currentSession = roleResult.first
+                    sessionStore.save(roleResult.first)
+                    currentRole = roleResult.second
+                    if (currentSession?.userId == restoredSession.userId) showHome()
+                } catch (_: Exception) {
+                    // Keep existing local records available when opening without a connection.
+                }
+            }
+        }
         observeEntries(currentSession?.userId ?: "local")
         if (currentSession != null) {
             observeWeekly(currentSession!!.userId)
@@ -340,6 +361,89 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun showSupervisorReviews() {
+        activeScreen = "reviews"
+        screenHost.removeAllViews()
+        addPageHeader("Supervisor reviews", "Review only weekly reports assigned to your account.")
+        val message = label("Loading assigned weekly reports…", 13f, ink).apply { setPadding(0, 0, 0, dp(10)) }
+        screenHost.addView(message)
+        val queue = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        screenHost.addView(queue, matchWrap())
+        screenHost.addView(actionButton("Refresh review queue", blue).apply {
+            setOnClickListener { showSupervisorReviews() }
+        }, matchWrap())
+
+        val session = currentSession
+        if (session == null) {
+            message.text = "Please sign in as an assigned supervisor."
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                val pair = withContext(Dispatchers.IO) {
+                    val api = SupabaseApi(this@MainActivity)
+                    val fresh = api.ensureFreshSession(session)
+                    Pair(fresh, api.fetchAssignedWeeklySummaries(fresh))
+                }
+                currentSession = pair.first
+                sessionStore.save(pair.first)
+                val results = pair.second
+                queue.removeAllViews()
+                if (results.length() == 0) {
+                    message.text = "No weekly reports are assigned to your supervisor account yet."
+                    return@launch
+                }
+                message.text = results.length().toString() + " assigned weekly report(s)"
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val summaryId = item.optString("id")
+                    val student = item.optJSONObject("student")
+                    val studentName = student?.optString("full_name").orEmpty()
+                        .ifBlank { "Student " + item.optString("student_id").take(8) }
+                    val card = panel()
+                    card.addView(label(studentName, 17f, navy, true))
+                    card.addView(label("Week starting " + item.optString("week_start"), 12f, blue, true).apply {
+                        setPadding(0, dp(4), 0, dp(8))
+                    })
+                    card.addView(label("Work completed", 12f, ink, true))
+                    card.addView(label(item.optString("summary"), 14f, ink).apply { setPadding(0, dp(4), 0, dp(8)) })
+                    val skills = item.optString("skills_learned")
+                    val challenges = item.optString("challenges")
+                    if (skills.isNotBlank()) card.addView(label("Skills learned: " + skills, 12f, ink).apply { setPadding(0, 0, 0, dp(5)) })
+                    if (challenges.isNotBlank()) card.addView(label("Challenges: " + challenges, 12f, ink).apply { setPadding(0, 0, 0, dp(5)) })
+                    val comments = addField(card, "Supervisor comments", item.optString("supervisor_comments"), true)
+                    card.addView(label(
+                        if (item.isNull("supervisor_signed_at")) "Not reviewed" else "Previously reviewed",
+                        12f, if (item.isNull("supervisor_signed_at")) Color.rgb(174, 105, 20) else green, true
+                    ).apply { setPadding(0, dp(6), 0, dp(6)) })
+                    val saveButton = actionButton("Save review and mark reviewed", blue)
+                    saveButton.setOnClickListener {
+                        saveButton.isEnabled = false
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    val api = SupabaseApi(this@MainActivity)
+                                    val fresh = api.ensureFreshSession(currentSession ?: session)
+                                    sessionStore.save(fresh)
+                                    api.saveWeeklyReview(fresh, summaryId, comments.text.toString().trim())
+                                }
+                                Toast.makeText(this@MainActivity, "Supervisor review saved.", Toast.LENGTH_LONG).show()
+                                showSupervisorReviews()
+                            } catch (e: Exception) {
+                                saveButton.isEnabled = true
+                                Toast.makeText(this@MainActivity, e.message ?: "Could not save review.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                    card.addView(saveButton, matchWrap())
+                    queue.addView(card, matchWrap())
+                }
+            } catch (e: Exception) {
+                message.text = e.message ?: "Could not load assigned reviews. Check your connection and supervisor assignment."
+            }
+        }
+    }
+
     private fun addPageHeader(title: String, subtitle: String) {
         screenHost.addView(actionButton("‹ Dashboard", navy).apply { setOnClickListener { showHome() } })
         screenHost.addView(label(title, 25f, navy, true).apply { setPadding(0, dp(16), 0, dp(4)) })
@@ -364,6 +468,9 @@ class MainActivity : ComponentActivity() {
                     db.entries().claimLocalEntries(session.userId)
                     db.weeklies().claimLocalSummaries(session.userId)
                     SupabaseApi(this@MainActivity).ensureStudentProfile(session, email)
+                }
+                currentRole = withContext(Dispatchers.IO) {
+                    SupabaseApi(this@MainActivity).fetchProfileRole(session)
                 }
                 showHome()
                 observeEntries(session.userId)
