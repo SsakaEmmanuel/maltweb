@@ -11,8 +11,11 @@ import java.util.concurrent.TimeUnit
 internal class SupabaseApi(private val context: Context) {
     private val sessions = SessionStore(context)
 
-    fun signUp(email: String, password: String): JSONObject =
-        request("POST", "/auth/v1/signup", JSONObject().put("email", email).put("password", password)) as JSONObject
+    fun signUp(email: String, password: String, metadata: JSONObject? = null): JSONObject {
+        val body = JSONObject().put("email", email).put("password", password)
+        if (metadata != null) body.put("data", metadata)
+        return request("POST", "/auth/v1/signup", body) as JSONObject
+    }
 
     fun signIn(email: String, password: String): AuthSession {
         val json = request(
@@ -48,22 +51,96 @@ internal class SupabaseApi(private val context: Context) {
     }
 
     fun ensureStudentProfile(session: AuthSession, email: String = session.email) {
-        val current = request(
-            "GET", "/rest/v1/profiles?select=id&id=eq.${session.userId}",
+        // Profile creation is deliberately handled by the shared registration workflow.
+        // Never silently convert a supervisor or organisation account into a student.
+        fetchProfile(session)
+    }
+
+    fun fetchProfile(session: AuthSession): JSONObject? {
+        val result = request(
+            "GET",
+            "/rest/v1/profiles?select=id,full_name,role,organization_id,school_name,student_number,gender,course,approval_status&id=eq.${session.userId}",
             token = session.accessToken
         ) as? JSONArray ?: throw IOException("Unexpected profile response.")
-        if (current.length() > 0) return
-        val name = email.substringBefore("@").ifBlank { "Student" }
+        return result.optJSONObject(0)
+    }
+
+    fun fetchOrganizations(): JSONArray {
+        return request(
+            "GET", "/rest/v1/organizations?select=id,name&order=name.asc"
+        ) as? JSONArray ?: throw IOException("Unexpected organisation list response.")
+    }
+
+    fun createOrganization(session: AuthSession, fullName: String, organizationName: String, gender: String): JSONObject? {
+        val result = request(
+            "POST", "/rest/v1/rpc/create_logbook_organization",
+            JSONObject().put("p_full_name", fullName).put("p_organization_name", organizationName).put("p_gender", gender),
+            token = session.accessToken
+        )
+        return if (result is JSONArray) result.optJSONObject(0) else result as? JSONObject
+    }
+
+    fun registerMember(
+        session: AuthSession, fullName: String, role: String, gender: String, course: String,
+        studentNumber: String, organizationId: String, organizationKey: String
+    ) {
         request(
-            "POST", "/rest/v1/profiles",
-            JSONArray().put(JSONObject()
-                .put("id", session.userId)
-                .put("full_name", name)
-                .put("role", "student")),
-            token = session.accessToken,
-            prefer = "return=minimal"
+            "POST", "/rest/v1/rpc/register_logbook_member",
+            JSONObject().put("p_full_name", fullName).put("p_role", role).put("p_gender", gender)
+                .put("p_course", course.ifBlank { JSONObject.NULL })
+                .put("p_student_number", studentNumber.ifBlank { JSONObject.NULL })
+                .put("p_organization_id", organizationId).put("p_organization_key", organizationKey),
+            token = session.accessToken
         )
     }
+
+    fun fetchOrganizationMembers(session: AuthSession, organizationId: String): JSONArray {
+        return request(
+            "GET",
+            "/rest/v1/profiles?select=id,full_name,role,gender,course,student_number,approval_status,created_at&organization_id=eq.$organizationId&order=full_name.asc",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected organisation members response.")
+    }
+
+    fun reviewOrganizationSupervisor(session: AuthSession, profileId: String, approve: Boolean) {
+        request("POST", "/rest/v1/rpc/organization_review_supervisor",
+            JSONObject().put("p_supervisor_id", profileId).put("p_approve", approve), token = session.accessToken)
+    }
+
+    fun assignOrganizationSupervisor(session: AuthSession, studentId: String, supervisorId: String, assignmentType: String) {
+        request("POST", "/rest/v1/rpc/organization_assign_supervisor",
+            JSONObject().put("p_student_id", studentId).put("p_supervisor_id", supervisorId).put("p_assignment_type", assignmentType),
+            token = session.accessToken)
+    }
+
+    fun saveAttendance(session: AuthSession, studentId: String, date: String, status: String, remarks: String) {
+        request("POST", "/rest/v1/attendance_records?on_conflict=student_id%2Cattendance_date",
+            JSONArray().put(JSONObject().put("student_id",studentId).put("attendance_date",date).put("status",status)
+                .put("remarks",remarks).put("recorded_by",session.userId)),
+            token=session.accessToken, prefer="resolution=merge-duplicates,return=minimal")
+    }
+
+    fun awardMark(session: AuthSession, studentId: String, score: Double, category: String, feedback: String) {
+        request("POST", "/rest/v1/performance_marks",
+            JSONArray().put(JSONObject().put("student_id",studentId).put("awarded_by",session.userId)
+                .put("score",score).put("category",category).put("feedback",feedback)),
+            token=session.accessToken, prefer="return=minimal")
+    }
+
+    fun fetchOrganizationMarks(session: AuthSession, studentIds: List<String>): JSONArray {
+        if (studentIds.isEmpty()) return JSONArray()
+        val filter = studentIds.joinToString(",")
+        return request(
+            "GET", "/rest/v1/performance_marks?select=id,student_id,score,category,feedback,created_at&student_id=in.($filter)&order=created_at.desc",
+            token=session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected performance marks response.")
+    }
+
+    fun rotateOrganizationKey(session: AuthSession): JSONObject? {
+        val result = request("POST", "/rest/v1/rpc/rotate_logbook_organization_key", JSONObject(), token=session.accessToken)
+        return if (result is JSONArray) result.optJSONObject(0) else result as? JSONObject
+    }
+
 
     fun uploadDailyEntry(session: AuthSession, entry: LogbookEntry) {
         val timestamp = java.time.Instant.ofEpochMilli(entry.updatedAt).toString()
@@ -113,7 +190,7 @@ internal class SupabaseApi(private val context: Context) {
             "GET", "/rest/v1/profiles?select=role&id=eq.${session.userId}",
             token = session.accessToken
         ) as? JSONArray ?: throw IOException("Unexpected profile-role response.")
-        return profiles.optJSONObject(0)?.optString("role")?.ifBlank { "student" } ?: "student"
+        return profiles.optJSONObject(0)?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
     }
 
     fun fetchAssignedWeeklySummaries(session: AuthSession): JSONArray {
