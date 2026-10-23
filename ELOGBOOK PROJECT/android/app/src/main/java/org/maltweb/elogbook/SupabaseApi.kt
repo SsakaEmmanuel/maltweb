@@ -12,33 +12,32 @@ internal class SupabaseApi(private val context: Context) {
     private val sessions = SessionStore(context)
 
     fun signUp(email: String, password: String): JSONObject =
-        request("POST", "/auth/v1/signup", JSONObject().put("email", email).put("password", password))
+        request("POST", "/auth/v1/signup", JSONObject().put("email", email).put("password", password)) as JSONObject
 
     fun signIn(email: String, password: String): AuthSession {
         val json = request(
             "POST", "/auth/v1/token?grant_type=password",
             JSONObject().put("email", email).put("password", password)
-        )
+        ) as JSONObject
         val user = json.optJSONObject("user") ?: throw IOException("Sign-in response did not include a user.")
         val access = json.optString("access_token")
         val refresh = json.optString("refresh_token")
-        if (access.isBlank() || refresh.isBlank()) throw IOException("Sign-in did not return a session. Check email confirmation.")
+        if (access.isBlank() || refresh.isBlank()) throw IOException("Sign-in did not return a session. Confirm the email first if confirmation is enabled.")
         val expiresAt = json.optLong("expires_at", System.currentTimeMillis() / 1000 + json.optLong("expires_in", 3600))
-        return AuthSession(user.getString("id"), access, refresh, TimeUnit.SECONDS.toMillis(expiresAt))
+        return AuthSession(user.getString("id"), access, refresh, TimeUnit.SECONDS.toMillis(expiresAt), email)
     }
 
     fun refresh(old: AuthSession): AuthSession {
         val json = request(
             "POST", "/auth/v1/token?grant_type=refresh_token",
             JSONObject().put("refresh_token", old.refreshToken)
-        )
-        val user = json.optJSONObject("user")
-        val userId = user?.optString("id").takeUnless { it.isNullOrBlank() } ?: old.userId
+        ) as JSONObject
+        val userId = json.optJSONObject("user")?.optString("id").takeUnless { it.isNullOrBlank() } ?: old.userId
         val access = json.optString("access_token")
         val refresh = json.optString("refresh_token", old.refreshToken)
         if (access.isBlank()) throw IOException("Session refresh returned no access token.")
         val expiresAt = json.optLong("expires_at", System.currentTimeMillis() / 1000 + json.optLong("expires_in", 3600))
-        return AuthSession(userId, access, refresh, TimeUnit.SECONDS.toMillis(expiresAt))
+        return AuthSession(userId, access, refresh, TimeUnit.SECONDS.toMillis(expiresAt), old.email)
     }
 
     fun ensureFreshSession(session: AuthSession): AuthSession {
@@ -48,12 +47,12 @@ internal class SupabaseApi(private val context: Context) {
         return renewed
     }
 
-    fun ensureStudentProfile(session: AuthSession, email: String) {
+    fun ensureStudentProfile(session: AuthSession, email: String = session.email) {
         val current = request(
             "GET", "/rest/v1/profiles?select=id&id=eq.${session.userId}",
             token = session.accessToken
-        )
-        if (current is JSONArray && current.length() > 0) return
+        ) as? JSONArray ?: throw IOException("Unexpected profile response.")
+        if (current.length() > 0) return
         val name = email.substringBefore("@").ifBlank { "Student" }
         request(
             "POST", "/rest/v1/profiles",
