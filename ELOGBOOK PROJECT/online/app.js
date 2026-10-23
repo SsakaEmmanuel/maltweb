@@ -3,7 +3,11 @@
   const configured = window.ELOGBOOK_CONFIG && /^https:\/\//.test(window.ELOGBOOK_CONFIG.supabaseUrl) && !window.ELOGBOOK_CONFIG.supabaseUrl.includes("PASTE_") && window.ELOGBOOK_CONFIG.supabaseAnonKey && !window.ELOGBOOK_CONFIG.supabaseAnonKey.includes("PASTE_");
   let client = null, currentUser = null;
   const say = (id, message, ok=false) => { $(id).textContent = message; $(id).classList.toggle("ok",ok); };
-  const today = new Date(); $("entryDate").value = new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const today = new Date();
+  const localDate = new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  $("entryDate").value = localDate;
+  const monday = new Date(today); monday.setDate(today.getDate()-((today.getDay()+6)%7));
+  $("weekStart").value = new Date(monday.getTime()-monday.getTimezoneOffset()*60000).toISOString().slice(0,10);
   if (configured && window.supabase) {
     client = window.supabase.createClient(window.ELOGBOOK_CONFIG.supabaseUrl, window.ELOGBOOK_CONFIG.supabaseAnonKey);
     $("connection").textContent = "Online portal";
@@ -18,7 +22,7 @@
     if (error) return say("authMessage",error.message);
     currentUser = session?.user || null;
     $("authPanel").hidden = !!currentUser; $("appPanel").hidden = !currentUser;
-    if (currentUser) { await ensureProfile(); await loadEntries(); }
+    if (currentUser) { await ensureProfile(); await loadEntries(); await loadWeekly(); }
   }
   async function ensureProfile() {
     if (!client || !currentUser) return;
@@ -49,6 +53,8 @@
   });
   $("signOut").addEventListener("click", async () => { if (client) {await client.auth.signOut();currentUser=null;await showSession();} });
   $("refresh").addEventListener("click",loadEntries);
+  $("refreshWeekly").addEventListener("click",loadWeekly);
+  $("weeklyForm").addEventListener("submit", saveWeekly);
   $("entryForm").addEventListener("submit",async e=>{
     e.preventDefault(); if (!client || !currentUser) return;
     const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
@@ -58,6 +64,46 @@
     if(error) say("entryMessage","Could not save: "+error.message);
     else {say("entryMessage","Daily entry saved online.",true);$("workDone").value=$("toolsUsed").value=$("skillsLearned").value=$("challenges").value=$("recommendations").value="";await loadEntries();}
   });
+
+  async function saveWeekly(e) {
+    e.preventDefault(); if (!client || !currentUser) return;
+    const weekStart = $("weekStart").value;
+    const summary = $("weeklySummary").value.trim();
+    if (!weekStart || !summary) return say("weeklyMessage","Choose the week starting date and enter your summary.");
+    const {error} = await client.from("weekly_summaries").upsert({
+      student_id: currentUser.id,
+      week_start: weekStart,
+      summary,
+      skills_learned: $("weeklySkills").value.trim(),
+      challenges: $("weeklyChallenges").value.trim(),
+      client_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }, {onConflict:"student_id,week_start"});
+    if (error) return say("weeklyMessage","Could not save weekly summary: "+error.message);
+    say("weeklyMessage","Weekly summary saved online.",true);
+    $("weeklySummary").value = $("weeklySkills").value = $("weeklyChallenges").value = "";
+    await loadWeekly();
+  }
+  async function loadWeekly() {
+    if (!client || !currentUser) return;
+    const {data,error} = await client.from("weekly_summaries")
+      .select("id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at,updated_at")
+      .eq("student_id",currentUser.id).order("week_start",{ascending:false}).limit(30);
+    if (error) { $("weeklyEntries").textContent = "Could not load weekly summaries: "+error.message; return; }
+    $("weeklyEntries").replaceChildren();
+    if (!data.length) {
+      const p=document.createElement("p"); p.className="muted"; p.textContent="No weekly summaries yet. Complete your first summary above."; $("weeklyEntries").append(p); return;
+    }
+    for (const item of data) {
+      const card=document.createElement("article"); card.className="entry";
+      const h=document.createElement("h3"); h.textContent="Week starting "+new Date(item.week_start+"T12:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); card.append(h);
+      for (const [label,value] of [["Summary",item.summary],["Skills learned",item.skills_learned],["Challenges",item.challenges],["Supervisor comments",item.supervisor_comments]]) {
+        if(value){const p=document.createElement("p");p.textContent=label+": "+value;card.append(p);}
+      }
+      const state=document.createElement("p");state.textContent=item.supervisor_signed_at?"Review status: Reviewed":"Review status: Awaiting supervisor review";card.append(state);
+      $("weeklyEntries").append(card);
+    }
+  }
   async function loadEntries(){
     if(!client||!currentUser)return;
     $("syncState").textContent=navigator.onLine?"Online":"Offline";
