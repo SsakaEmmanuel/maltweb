@@ -9,7 +9,9 @@ internal class SyncWorker(context: Context, params: WorkerParameters) : Coroutin
     override suspend fun doWork(): Result {
         val store = SessionStore(applicationContext)
         var session = store.read() ?: return Result.success()
-        val dao = LogbookDatabase.get(applicationContext).entries()
+        val database = LogbookDatabase.get(applicationContext)
+        val dao = database.entries()
+        val weeklyDao = database.weeklies()
         return try {
             val api = SupabaseApi(applicationContext)
             session = api.ensureFreshSession(session)
@@ -18,6 +20,11 @@ internal class SyncWorker(context: Context, params: WorkerParameters) : Coroutin
             for (entry in pending) {
                 api.uploadDailyEntry(session, entry)
                 dao.markSynced(entry.id)
+            }
+            val pendingWeekly = weeklyDao.pendingSync(session.userId)
+            for (summary in pendingWeekly) {
+                api.uploadWeeklySummary(session, summary.weekStart, summary.summary, summary.skillsLearned, summary.challenges)
+                weeklyDao.markSynced(summary.id)
             }
             Result.success()
         } catch (e: IOException) {
