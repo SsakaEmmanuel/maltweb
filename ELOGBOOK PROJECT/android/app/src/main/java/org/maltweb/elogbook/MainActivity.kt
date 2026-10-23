@@ -372,6 +372,8 @@ class MainActivity : ComponentActivity() {
                         setPadding(dp(8), dp(10), dp(6), dp(10))
                     }
                     details.addView(label(entry.workDone, 13f, ink, true))
+                    if (entry.supervisorComments.isNotBlank()) details.addView(label("Supervisor feedback: " + entry.supervisorComments, 12f, ink).apply { setPadding(0, dp(4), 0, 0) })
+                    if (!entry.supervisorReviewedAt.isNullOrBlank()) details.addView(label("Reviewed: " + entry.supervisorReviewedAt, 10f, green, true).apply { setPadding(0, dp(4), 0, 0) })
                     details.addView(label(if (entry.syncStatus == "synced") "SYNCED" else "PENDING SYNC", 10f, if (entry.syncStatus == "synced") green else Color.rgb(174, 105, 20), true).apply { setPadding(0, dp(4), 0, 0) })
                     row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
                     table.addView(row)
