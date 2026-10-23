@@ -75,10 +75,35 @@ alter table public.daily_entries enable row level security;
 alter table public.weekly_summaries enable row level security;
 alter table public.supervisor_assignments enable row level security;
 
+-- Create a basic student profile automatically after email sign-up. The role is fixed to student;
+-- privileged roles must be provisioned by a trusted administrator, never by client metadata.
+create or replace function public.handle_new_elogbook_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $
+begin
+  insert into public.profiles (id, full_name, role)
+  values (
+    new.id,
+    coalesce(nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), split_part(new.email, '@', 1)),
+    'student'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$;
+
+drop trigger if exists on_auth_user_created_elogbook on auth.users;
+create trigger on_auth_user_created_elogbook
+after insert on auth.users
+for each row execute procedure public.handle_new_elogbook_user();
+
 -- A profile is visible/editable only by its owner in the initial version.
 create policy "profile owner reads own profile" on public.profiles for select to authenticated using ((select auth.uid()) = id);
 create policy "profile owner creates own profile" on public.profiles for insert to authenticated with check ((select auth.uid()) = id and role = 'student');
-create policy "profile owner updates own profile" on public.profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id and role = (select p.role from public.profiles p where p.id = (select auth.uid())));
+create policy "student profile owner updates own profile" on public.profiles for update to authenticated using ((select auth.uid()) = id) with check ((select auth.uid()) = id and role = 'student');
 
 -- Students own their records. Supervisor review policies are added only after
 -- trusted admin-managed assignments and role provisioning are configured.
