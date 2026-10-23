@@ -15,6 +15,8 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     private lateinit var db: LogbookDatabase
@@ -23,6 +25,18 @@ class MainActivity : ComponentActivity() {
     private lateinit var authMessage: TextView
     private lateinit var emailField: EditText
     private lateinit var passwordField: EditText
+    private lateinit var registrationFields: LinearLayout
+    private lateinit var registrationName: EditText
+    private lateinit var registrationCourse: EditText
+    private lateinit var registrationStudentNumber: EditText
+    private lateinit var registrationOrganizationName: EditText
+    private lateinit var registrationOrganizationKey: EditText
+    private lateinit var registrationRole: Spinner
+    private lateinit var registrationGender: Spinner
+    private lateinit var registrationOrganization: Spinner
+    private lateinit var registrationAction: Button
+    private var organizations: JSONArray = JSONArray()
+    private var currentProfile: JSONObject? = null
     private lateinit var dateField: EditText
     private lateinit var workField: EditText
     private lateinit var toolsField: EditText
