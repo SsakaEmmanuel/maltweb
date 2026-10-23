@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const configured = window.ELOGBOOK_CONFIG && /^https:\/\//.test(window.ELOGBOOK_CONFIG.supabaseUrl) && !window.ELOGBOOK_CONFIG.supabaseUrl.includes("PASTE_") && window.ELOGBOOK_CONFIG.supabaseAnonKey && !window.ELOGBOOK_CONFIG.supabaseAnonKey.includes("PASTE_");
-  let client = null, currentUser = null;
+  let client = null, currentUser = null, currentRole = "student";
   const say = (id, message, ok=false) => { $(id).textContent = message; $(id).classList.toggle("ok",ok); };
   const today = new Date();
   const localDate = new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
@@ -22,17 +22,34 @@
     if (error) return say("authMessage",error.message);
     currentUser = session?.user || null;
     $("authPanel").hidden = !!currentUser; $("appPanel").hidden = !currentUser;
-    if (currentUser) { await ensureProfile(); await loadEntries(); await loadWeekly(); }
+    if (!currentUser) {
+      currentRole = "student";
+      $("studentPanel").hidden = false;
+      $("supervisorPanel").hidden = true;
+      return;
+    }
+    await ensureProfile();
+    const canReview = currentRole === "field_supervisor" || currentRole === "institution_supervisor";
+    $("studentPanel").hidden = canReview;
+    $("supervisorPanel").hidden = !canReview;
+    await loadEntries();
+    await loadWeekly();
+    if (canReview) await loadReviewQueue();
   }
   async function ensureProfile() {
     if (!client || !currentUser) return;
-    const {data,error} = await client.from("profiles").select("id").eq("id",currentUser.id).maybeSingle();
+    const {data,error} = await client.from("profiles").select("id,role,full_name").eq("id",currentUser.id).maybeSingle();
     if (error) { say("entryMessage","Profile check failed: "+error.message); return; }
+    if (data) {
+      currentRole = data.role || "student";
+      return;
+    }
     if (!data) {
       const fallback = (currentUser.email || "student").split("@")[0];
       const fullName = (currentUser.user_metadata && currentUser.user_metadata.full_name) || fallback;
       const {error:insertError} = await client.from("profiles").insert({id:currentUser.id,full_name:fullName,role:"student"});
       if (insertError) say("entryMessage","Account profile could not be created: "+insertError.message);
+      else currentRole = "student";
     }
   }
   $("authForm").addEventListener("submit", async e => {
@@ -55,6 +72,7 @@
   $("refresh").addEventListener("click",loadEntries);
   $("refreshWeekly").addEventListener("click",loadWeekly);
   $("weeklyForm").addEventListener("submit", saveWeekly);
+  $("refreshReviews").addEventListener("click",loadReviewQueue);
   $("entryForm").addEventListener("submit",async e=>{
     e.preventDefault(); if (!client || !currentUser) return;
     const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
@@ -104,6 +122,66 @@
       $("weeklyEntries").append(card);
     }
   }
+  async function loadReviewQueue() {
+    if (!client || !currentUser || !["field_supervisor","institution_supervisor"].includes(currentRole)) return;
+    say("reviewMessage","Loading your assigned students…");
+    $("reviewQueue").replaceChildren();
+    const {data: assignments,error: assignmentError} = await client.from("supervisor_assignments")
+      .select("student_id,assignment_type").eq("supervisor_id",currentUser.id);
+    if (assignmentError) return say("reviewMessage","Could not load supervisor assignments: "+assignmentError.message);
+    const assignedIds = [...new Set((assignments || [])
+      .filter(a => a.assignment_type === currentRole).map(a => a.student_id))];
+    if (!assignedIds.length) {
+      say("reviewMessage","No students are assigned to this supervisor account yet.");
+      return;
+    }
+    const [profileResult,summaryResult] = await Promise.all([
+      client.from("profiles").select("id,full_name").in("id",assignedIds),
+      client.from("weekly_summaries")
+        .select("id,student_id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at")
+        .in("student_id",assignedIds).order("week_start",{ascending:false}).limit(100)
+    ]);
+    if (profileResult.error) return say("reviewMessage","Could not load student names: "+profileResult.error.message);
+    if (summaryResult.error) return say("reviewMessage","Could not load weekly reports: "+summaryResult.error.message);
+    const names = Object.fromEntries((profileResult.data || []).map(p => [p.id,p.full_name || "Student"]));
+    $("reviewQueue").replaceChildren();
+    const summaries = summaryResult.data || [];
+    if (!summaries.length) {
+      say("reviewMessage","Your assigned students do not have weekly summaries yet.");
+      return;
+    }
+    say("reviewMessage",summaries.length+" weekly report(s) assigned to you.");
+    for (const item of summaries) {
+      const card=document.createElement("article"); card.className="entry review-entry";
+      const heading=document.createElement("h3"); heading.textContent=names[item.student_id] || "Assigned student"; card.append(heading);
+      const week=document.createElement("p"); week.textContent="Week starting "+new Date(item.week_start+"T12:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); card.append(week);
+      for (const [label,value] of [["Work completed",item.summary],["Skills learned",item.skills_learned],["Challenges",item.challenges]]) {
+        if (value) { const p=document.createElement("p"); p.textContent=label+": "+value; card.append(p); }
+      }
+      const fieldLabel=document.createElement("label"); fieldLabel.textContent="Supervisor comments";
+      const comments=document.createElement("textarea"); comments.rows=3; comments.maxLength=4000; comments.value=item.supervisor_comments || "";
+      fieldLabel.append(comments); card.append(fieldLabel);
+      const state=document.createElement("p"); state.textContent=item.supervisor_signed_at
+        ? "Reviewed on "+new Date(item.supervisor_signed_at).toLocaleString()
+        : "Awaiting supervisor review";
+      card.append(state);
+      const save=document.createElement("button"); save.type="button"; save.textContent="Save review and mark reviewed";
+      save.addEventListener("click",async()=>{
+        save.disabled=true; say("reviewMessage","Saving supervisor review…");
+        const {error}=await client.from("weekly_summaries").update({
+          supervisor_comments:comments.value.trim(),
+          supervisor_signed_at:new Date().toISOString(),
+          updated_at:new Date().toISOString()
+        }).eq("id",item.id);
+        save.disabled=false;
+        if(error){say("reviewMessage","Review could not be saved: "+error.message);return;}
+        say("reviewMessage","Supervisor review saved.",true);
+        await loadReviewQueue();
+      });
+      card.append(save); $("reviewQueue").append(card);
+    }
+  }
+
   async function loadEntries(){
     if(!client||!currentUser)return;
     $("syncState").textContent=navigator.onLine?"Online":"Offline";
