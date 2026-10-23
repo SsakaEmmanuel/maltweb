@@ -249,6 +249,15 @@ internal class SupabaseApi(private val context: Context) {
         ) as? JSONArray ?: throw IOException("Unexpected weekly-review status response.")
     }
 
+    fun fetchCourseStudents(session: AuthSession, organizationId: String, course: String): JSONArray {
+        val encodedCourse = java.net.URLEncoder.encode(course, "UTF-8")
+        return request(
+            "GET",
+            "/rest/v1/profiles?select=id,full_name,course,student_number&organization_id=eq.$organizationId&course=eq.$encodedCourse&role=eq.student&order=full_name.asc",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected course roster response.")
+    }
+
     fun fetchAssignedStudentProfiles(session: AuthSession, assignmentType: String): JSONArray {
         val assignments = request(
             "GET", "/rest/v1/supervisor_assignments?select=student_id,assignment_type&supervisor_id=eq.${session.userId}",
