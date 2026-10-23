@@ -107,6 +107,43 @@ internal class SupabaseApi(private val context: Context) {
         )
     }
 
+
+    fun fetchProfileRole(session: AuthSession): String {
+        val profiles = request(
+            "GET", "/rest/v1/profiles?select=role&id=eq.${session.userId}",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected profile-role response.")
+        return profiles.optJSONObject(0)?.optString("role")?.ifBlank { "student" } ?: "student"
+    }
+
+    fun fetchAssignedWeeklySummaries(session: AuthSession): JSONArray {
+        return request(
+            "GET",
+            "/rest/v1/weekly_summaries?select=id,student_id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at,student:profiles!weekly_summaries_student_id_fkey(full_name)&student_id=neq.${session.userId}&order=week_start.desc&limit=100",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected weekly-review response.")
+    }
+
+    fun saveWeeklyReview(session: AuthSession, summaryId: String, comments: String) {
+        val now = java.time.Instant.now().toString()
+        val payload = JSONObject()
+            .put("supervisor_comments", comments)
+            .put("supervisor_signed_at", now)
+            .put("updated_at", now)
+        request(
+            "PATCH", "/rest/v1/weekly_summaries?id=eq.$summaryId",
+            payload, token = session.accessToken, prefer = "return=minimal"
+        )
+    }
+
+    fun fetchMyWeeklyReviews(session: AuthSession): JSONArray {
+        return request(
+            "GET",
+            "/rest/v1/weekly_summaries?select=week_start,supervisor_comments,supervisor_signed_at&student_id=eq.${session.userId}&limit=100",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected weekly-review status response.")
+    }
+
     private fun request(
         method: String,
         path: String,
