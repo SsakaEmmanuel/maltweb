@@ -393,21 +393,21 @@ class MainActivity : ComponentActivity() {
         screenHost.addView(actionButton("Back to dashboard", navy).apply { setOnClickListener { showHome() } }, matchWrap())
     }
 
-    private fun showWeekly() {
+    private fun showWeekly(existing: WeeklySummary? = null) {
         activeScreen = "weekly"
         screenHost.removeAllViews()
-        addPageHeader("Weekly reports", "Capture your week and track supervisor review.")
+        addPageHeader(if (existing == null) "Weekly reports" else "Edit weekly summary", if (existing == null) "Capture your week and track supervisor review." else "Update your saved report. Changing its content clears the previous review.")
 
         val form = panel()
         form.addView(label("WEEKLY ACTIVITY SUMMARY", 12f, blue, true))
         form.addView(label("What did you accomplish this week?", 19f, navy, true).apply { setPadding(0, dp(8), 0, dp(4)) })
-        val weekStart = addField(form, "Week starting (Monday, YYYY-MM-DD)", mondayDate(), false)
-        val summaryField = addField(form, "Work completed this week *", "", true)
-        val skillsField = addField(form, "Skills or lessons learned", "", true)
-        val challengesField = addField(form, "Challenges and solutions", "", true)
+        val weekStart = addField(form, "Week starting (Monday, YYYY-MM-DD)", existing?.weekStart ?: mondayDate(), false)
+        val summaryField = addField(form, "Work completed this week *", existing?.summary ?: "", true)
+        val skillsField = addField(form, "Skills or lessons learned", existing?.skillsLearned ?: "", true)
+        val challengesField = addField(form, "Challenges and solutions", existing?.challenges ?: "", true)
         val message = label("", 13f, green).apply { setPadding(0, dp(8), 0, dp(4)) }
         form.addView(message)
-        form.addView(actionButton("Save weekly summary", blue).apply {
+        form.addView(actionButton(if (existing == null) "Save weekly summary" else "Save changes", blue).apply {
             setOnClickListener {
                 val startDate = weekStart.text.toString().trim()
                 val summary = summaryField.text.toString().trim()
@@ -419,20 +419,33 @@ class MainActivity : ComponentActivity() {
                 val owner = currentSession?.userId ?: "local"
                 lifecycleScope.launch {
                     try {
-                        db.weeklies().save(
-                            WeeklySummary(
-                                weekStart = startDate,
-                                summary = summary,
-                                skillsLearned = skillsField.text.toString().trim(),
-                                challenges = challengesField.text.toString().trim(),
-                                ownerUserId = owner
-                            )
+                        val skills = skillsField.text.toString().trim()
+                        val challenges = challengesField.text.toString().trim()
+                        val previous = db.weeklies().findByOwnerAndWeek(owner, startDate)
+                        val changed = previous == null || previous.summary != summary ||
+                            previous.skillsLearned != skills || previous.challenges != challenges
+                        val updated = if (previous == null) {
+                            WeeklySummary(weekStart = startDate, summary = summary, skillsLearned = skills,
+                                challenges = challenges, ownerUserId = owner)
+                        } else previous.copy(
+                            summary = summary,
+                            skillsLearned = skills,
+                            challenges = challenges,
+                            syncStatus = if (changed) "pending" else previous.syncStatus,
+                            supervisorComments = if (changed) "" else previous.supervisorComments,
+                            supervisorReviewedAt = if (changed) null else previous.supervisorReviewedAt,
+                            updatedAt = if (changed) System.currentTimeMillis() else previous.updatedAt
                         )
-                        if (currentSession != null) SyncScheduler.syncNow(this@MainActivity)
+                        db.weeklies().save(updated)
+                        if (currentSession != null && changed) SyncScheduler.syncNow(this@MainActivity)
                         summaryField.text.clear()
                         skillsField.text.clear()
                         challengesField.text.clear()
-                        message.text = if (currentSession != null) "Saved on this device. Sync has been queued." else "Saved on this device. Sign in to sync it later."
+                        message.text = when {
+                            !changed -> "No changes detected; previous feedback was preserved."
+                            currentSession != null -> "Saved on this device. Sync has been queued."
+                            else -> "Saved on this device. Sign in to sync it later."
+                        }
                         message.setTextColor(green)
                         Toast.makeText(this@MainActivity, "Weekly summary saved.", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
@@ -489,6 +502,9 @@ class MainActivity : ComponentActivity() {
                         if (!item.supervisorReviewedAt.isNullOrBlank()) {
                             row.addView(label("Reviewed on " + item.supervisorReviewedAt, 11f, green, true).apply { setPadding(0, dp(5), 0, 0) })
                         }
+                        row.addView(actionButton("View / edit summary", blue).apply {
+                            setOnClickListener { showWeekly(item) }
+                        }, matchWrap())
                         weeklyList.addView(row, matchWrap())
                     }
                 }
