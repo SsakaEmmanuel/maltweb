@@ -328,26 +328,29 @@ class MainActivity : ComponentActivity() {
         screenHost.addView(card, matchWrap())
     }
 
-    private fun showEntry() {
+    private fun showEntry(existing: LogbookEntry? = null) {
         activeScreen = "entry"
         screenHost.removeAllViews()
-        addPageHeader("New daily record", "Record what you worked on today.")
+        addPageHeader(if (existing == null) "New daily record" else "Edit daily record",
+            if (existing == null) "Record what you worked on today." else "Update your saved entry. Changing report content clears its previous review.")
         val card = panel()
-        dateField = addField(card, "Date (YYYY-MM-DD)", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()), false)
-        workField = addField(card, "Work done today *", "", true)
-        toolsField = addField(card, "Tools / equipment used", "", false)
-        skillsField = addField(card, "Skills or lessons learned", "", true)
-        challengesField = addField(card, "Challenges encountered", "", true)
-        recommendationsField = addField(card, "Recommendations", "", true)
-        card.addView(actionButton("Save daily record", blue).apply { setOnClickListener { saveEntry() } }, matchWrap())
+        dateField = addField(card, "Date (YYYY-MM-DD)", existing?.entryDate ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()), false)
+        workField = addField(card, "Work done today *", existing?.workDone ?: "", true)
+        toolsField = addField(card, "Tools / equipment used", existing?.toolsUsed ?: "", false)
+        skillsField = addField(card, "Skills or lessons learned", existing?.skillsLearned ?: "", true)
+        challengesField = addField(card, "Challenges encountered", existing?.challenges ?: "", true)
+        recommendationsField = addField(card, "Recommendations", existing?.recommendations ?: "", true)
+        card.addView(actionButton(if (existing == null) "Save daily record" else "Save changes", blue).apply {
+            setOnClickListener { saveEntry() }
+        }, matchWrap())
         screenHost.addView(card, matchWrap())
-        screenHost.addView(actionButton("Back to dashboard", navy).apply { setOnClickListener { showHome() } }, matchWrap())
+        screenHost.addView(actionButton("Back to saved records", navy).apply { setOnClickListener { showRecords() } }, matchWrap())
     }
 
     private fun showRecords() {
         activeScreen = "records"
         screenHost.removeAllViews()
-        addPageHeader("Saved records", "Your saved daily entries and sync status.")
+        addPageHeader("Saved records", "Tap a row to view and edit its saved fields and supervisor feedback.")
         val tableCard = panel()
         val table = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setBackgroundColor(navy) }
@@ -378,6 +381,9 @@ class MainActivity : ComponentActivity() {
                     if (!entry.supervisorReviewedAt.isNullOrBlank()) details.addView(label("Reviewed: " + entry.supervisorReviewedAt, 10f, green, true).apply { setPadding(0, dp(4), 0, 0) })
                     details.addView(label(if (entry.syncStatus == "synced") "SYNCED" else "PENDING SYNC", 10f, if (entry.syncStatus == "synced") green else Color.rgb(174, 105, 20), true).apply { setPadding(0, dp(4), 0, 0) })
                     row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+                    row.setOnClickListener { showEntry(entry) }
+                    row.isClickable = true
+                    row.addView(label("Tap to edit", 10f, blue, true).apply { setPadding(dp(8), dp(4), dp(8), dp(4)) })
                     table.addView(row)
                     table.addView(View(this@MainActivity).apply { setBackgroundColor(Color.rgb(225, 230, 238)) }, LinearLayout.LayoutParams(-1, dp(1)))
                 }
@@ -1228,19 +1234,37 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Enter a valid date and the work done.", Toast.LENGTH_LONG).show()
             return
         }
+        val tools = toolsField.text.toString().trim()
+        val skills = skillsField.text.toString().trim()
+        val challenges = challengesField.text.toString().trim()
+        val recommendations = recommendationsField.text.toString().trim()
         val ownerId = currentSession?.userId ?: "local"
         lifecycleScope.launch {
-            db.entries().save(LogbookEntry(
-                entryDate = date,
-                workDone = work,
-                toolsUsed = toolsField.text.toString().trim(),
-                skillsLearned = skillsField.text.toString().trim(),
-                challenges = challengesField.text.toString().trim(),
-                recommendations = recommendationsField.text.toString().trim(),
-                ownerUserId = ownerId
-            ))
-            if (currentSession != null) SyncScheduler.syncNow(this@MainActivity)
-            Toast.makeText(this@MainActivity, if (currentSession != null) "Daily record saved. Sync queued." else "Daily record saved offline.", Toast.LENGTH_LONG).show()
+            val existing = db.entries().findByOwnerAndDate(ownerId, date)
+            val changed = existing == null || existing.workDone != work || existing.toolsUsed != tools ||
+                existing.skillsLearned != skills || existing.challenges != challenges ||
+                existing.recommendations != recommendations
+            val record = if (existing == null) {
+                LogbookEntry(
+                    entryDate = date, workDone = work, toolsUsed = tools,
+                    skillsLearned = skills, challenges = challenges,
+                    recommendations = recommendations, ownerUserId = ownerId
+                )
+            } else existing.copy(
+                workDone = work, toolsUsed = tools, skillsLearned = skills,
+                challenges = challenges, recommendations = recommendations,
+                syncStatus = if (changed) "pending" else existing.syncStatus,
+                supervisorComments = if (changed) "" else existing.supervisorComments,
+                supervisorReviewedAt = if (changed) null else existing.supervisorReviewedAt,
+                updatedAt = if (changed) System.currentTimeMillis() else existing.updatedAt
+            )
+            db.entries().save(record)
+            if (currentSession != null && changed) SyncScheduler.syncNow(this@MainActivity)
+            Toast.makeText(this@MainActivity, when {
+                !changed -> "No changes detected; the saved record and review were preserved."
+                currentSession != null -> "Daily record saved. Sync queued."
+                else -> "Daily record saved offline."
+            }, Toast.LENGTH_LONG).show()
             showRecords()
         }
     }
