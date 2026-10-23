@@ -176,3 +176,99 @@ DROP TRIGGER IF EXISTS protect_daily_entry_review_fields ON public.daily_entries
 CREATE TRIGGER protect_daily_entry_review_fields
 BEFORE UPDATE ON public.daily_entries
 FOR EACH ROW EXECUTE FUNCTION public.protect_logbook_review_fields();
+
+
+
+-- Consolidate own-record and assigned-reviewer access into a single policy per
+-- operation so the database only evaluates one permissive policy per action.
+DROP POLICY IF EXISTS "profile owner reads own profile" ON public.profiles;
+DROP POLICY IF EXISTS "assigned supervisor reads assigned student profile" ON public.profiles;
+CREATE POLICY "owners and assigned supervisors read profiles"
+ON public.profiles FOR SELECT TO authenticated
+USING (
+  id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    WHERE sa.student_id = profiles.id AND sa.supervisor_id = (SELECT auth.uid())
+  )
+);
+
+DROP POLICY IF EXISTS "student reads own daily entries" ON public.daily_entries;
+DROP POLICY IF EXISTS "assigned supervisors read daily entries" ON public.daily_entries;
+CREATE POLICY "students and assigned supervisors read daily entries"
+ON public.daily_entries FOR SELECT TO authenticated
+USING (
+  student_id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    JOIN public.profiles reviewer ON reviewer.id = (SELECT auth.uid())
+    WHERE sa.student_id = daily_entries.student_id AND sa.supervisor_id = (SELECT auth.uid())
+      AND ((sa.assignment_type = 'field_supervisor' AND reviewer.role = 'field_supervisor')
+        OR (sa.assignment_type = 'institution_supervisor' AND reviewer.role = 'institution_supervisor'))
+  )
+);
+
+DROP POLICY IF EXISTS "student updates own daily entries" ON public.daily_entries;
+DROP POLICY IF EXISTS "assigned supervisors update daily review" ON public.daily_entries;
+CREATE POLICY "students and assigned supervisors update daily entries"
+ON public.daily_entries FOR UPDATE TO authenticated
+USING (
+  student_id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    JOIN public.profiles reviewer ON reviewer.id = (SELECT auth.uid())
+    WHERE sa.student_id = daily_entries.student_id AND sa.supervisor_id = (SELECT auth.uid())
+      AND ((sa.assignment_type = 'field_supervisor' AND reviewer.role = 'field_supervisor')
+        OR (sa.assignment_type = 'institution_supervisor' AND reviewer.role = 'institution_supervisor'))
+  )
+)
+WITH CHECK (
+  student_id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    JOIN public.profiles reviewer ON reviewer.id = (SELECT auth.uid())
+    WHERE sa.student_id = daily_entries.student_id AND sa.supervisor_id = (SELECT auth.uid())
+      AND ((sa.assignment_type = 'field_supervisor' AND reviewer.role = 'field_supervisor')
+        OR (sa.assignment_type = 'institution_supervisor' AND reviewer.role = 'institution_supervisor'))
+  )
+);
+
+DROP POLICY IF EXISTS "student reads own weekly summaries" ON public.weekly_summaries;
+DROP POLICY IF EXISTS "assigned supervisors read weekly summaries" ON public.weekly_summaries;
+CREATE POLICY "students and assigned supervisors read weekly summaries"
+ON public.weekly_summaries FOR SELECT TO authenticated
+USING (
+  student_id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    JOIN public.profiles reviewer ON reviewer.id = (SELECT auth.uid())
+    WHERE sa.student_id = weekly_summaries.student_id AND sa.supervisor_id = (SELECT auth.uid())
+      AND ((sa.assignment_type = 'field_supervisor' AND reviewer.role = 'field_supervisor')
+        OR (sa.assignment_type = 'institution_supervisor' AND reviewer.role = 'institution_supervisor'))
+  )
+);
+
+DROP POLICY IF EXISTS "student updates own weekly summaries" ON public.weekly_summaries;
+DROP POLICY IF EXISTS "assigned supervisors update weekly review" ON public.weekly_summaries;
+CREATE POLICY "students and assigned supervisors update weekly summaries"
+ON public.weekly_summaries FOR UPDATE TO authenticated
+USING (
+  student_id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    JOIN public.profiles reviewer ON reviewer.id = (SELECT auth.uid())
+    WHERE sa.student_id = weekly_summaries.student_id AND sa.supervisor_id = (SELECT auth.uid())
+      AND ((sa.assignment_type = 'field_supervisor' AND reviewer.role = 'field_supervisor')
+        OR (sa.assignment_type = 'institution_supervisor' AND reviewer.role = 'institution_supervisor'))
+  )
+)
+WITH CHECK (
+  student_id = (SELECT auth.uid())
+  OR EXISTS (
+    SELECT 1 FROM public.supervisor_assignments sa
+    JOIN public.profiles reviewer ON reviewer.id = (SELECT auth.uid())
+    WHERE sa.student_id = weekly_summaries.student_id AND sa.supervisor_id = (SELECT auth.uid())
+      AND ((sa.assignment_type = 'field_supervisor' AND reviewer.role = 'field_supervisor')
+        OR (sa.assignment_type = 'institution_supervisor' AND reviewer.role = 'institution_supervisor'))
+  )
+);
