@@ -26,6 +26,17 @@ internal class SyncWorker(context: Context, params: WorkerParameters) : Coroutin
                 api.uploadWeeklySummary(session, summary.weekStart, summary.summary, summary.skillsLearned, summary.challenges)
                 weeklyDao.markSynced(summary.id)
             }
+            val dailyReviews = api.fetchMyDailyReviews(session)
+            for (i in 0 until dailyReviews.length()) {
+                val review = dailyReviews.getJSONObject(i)
+                val reviewedAt = if (review.isNull("supervisor_signed_at")) null else review.optString("supervisor_signed_at")
+                dao.updateReview(
+                    session.userId,
+                    review.optString("entry_date"),
+                    review.optString("supervisor_comments", ""),
+                    reviewedAt
+                )
+            }
             val reviews = api.fetchMyWeeklyReviews(session)
             for (i in 0 until reviews.length()) {
                 val review = reviews.getJSONObject(i)
