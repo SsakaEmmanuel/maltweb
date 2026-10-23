@@ -201,7 +201,8 @@ drop policy if exists "owners supervisors and organization read profiles" on pub
 drop policy if exists "owners supervisors and organisation read profiles" on public.profiles;
 create policy "owners supervisors and organisation read profiles" on public.profiles for select to authenticated using (
  id=(select auth.uid())
- or exists(select 1 from public.supervisor_assignments sa where sa.student_id=profiles.id and sa.supervisor_id=(select auth.uid()))
+ or exists(select 1 from public.supervisor_assignments sa where sa.student_id=profiles.id and sa.supervisor_id=(select auth.uid())
+   and sa.assignment_type=public.current_logbook_role() and public.current_logbook_approval_status()='approved')
  or (public.current_logbook_role()='organization_admin' and public.current_logbook_organization_id()=profiles.organization_id)
  or (public.current_logbook_role()='student' and profiles.role='student' and profiles.organization_id=public.current_logbook_organization_id() and profiles.course=public.current_logbook_course())
 );
@@ -255,7 +256,8 @@ create policy "students view organisation course rankings" on public.performance
  student_id=(select auth.uid())
  or (public.current_logbook_role()='student' and exists(select 1 from public.profiles student where student.id=performance_marks.student_id and student.role='student' and student.organization_id=public.current_logbook_organization_id() and student.course=public.current_logbook_course()))
  or (public.current_logbook_role()='organization_admin' and exists(select 1 from public.profiles student where student.id=performance_marks.student_id and student.organization_id=public.current_logbook_organization_id()))
- or exists(select 1 from public.supervisor_assignments sa where sa.student_id=performance_marks.student_id and sa.supervisor_id=(select auth.uid()))
+ or exists(select 1 from public.supervisor_assignments sa where sa.student_id=performance_marks.student_id and sa.supervisor_id=(select auth.uid())
+   and sa.assignment_type=public.current_logbook_role() and public.current_logbook_approval_status()='approved')
 );
 
 grant usage on schema public to anon,authenticated;
