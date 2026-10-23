@@ -489,8 +489,8 @@ class MainActivity : ComponentActivity() {
     private fun showSupervisorReviews() {
         activeScreen = "reviews"
         screenHost.removeAllViews()
-        addPageHeader("Supervisor reviews", "Review only weekly reports assigned to your account.")
-        val message = label("Loading assigned weekly reports…", 13f, ink).apply { setPadding(0, 0, 0, dp(10)) }
+        addPageHeader("Supervisor reviews", "Review assigned daily records and weekly summaries.")
+        val message = label("Loading assigned student reports…", 13f, ink).apply { setPadding(0, 0, 0, dp(10)) }
         screenHost.addView(message)
         val queue = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         screenHost.addView(queue, matchWrap())
@@ -505,66 +505,126 @@ class MainActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             try {
-                val pair = withContext(Dispatchers.IO) {
+                val reports = withContext(Dispatchers.IO) {
                     val api = SupabaseApi(this@MainActivity)
                     val fresh = api.ensureFreshSession(session)
-                    Pair(fresh, api.fetchAssignedWeeklySummaries(fresh))
+                    Triple(fresh, api.fetchAssignedDailyEntries(fresh), api.fetchAssignedWeeklySummaries(fresh))
                 }
-                currentSession = pair.first
-                sessionStore.save(pair.first)
-                val results = pair.second
+                currentSession = reports.first
+                sessionStore.save(reports.first)
+                val daily = reports.second
+                val weekly = reports.third
                 queue.removeAllViews()
-                if (results.length() == 0) {
-                    message.text = "No weekly reports are assigned to your supervisor account yet."
+                if (daily.length() == 0 && weekly.length() == 0) {
+                    message.text = "No reports are assigned to this supervisor account yet."
                     return@launch
                 }
-                message.text = results.length().toString() + " assigned weekly report(s)"
-                for (i in 0 until results.length()) {
-                    val item = results.getJSONObject(i)
+                message.text = daily.length().toString() + " daily report(s) • " +
+                    weekly.length().toString() + " weekly report(s)"
+                queue.addView(label("DAILY REPORTS", 13f, blue, true).apply {
+                    setPadding(0, dp(8), 0, dp(8))
+                })
+                for (i in 0 until daily.length()) {
+                    val item = daily.getJSONObject(i)
+                    val entryId = item.optString("id")
+                    val student = item.optJSONObject("student")
+                    val studentName = student?.optString("full_name").orEmpty()
+                        .ifBlank { "Student " + item.optString("student_id").take(8) }
+                    val card = panel()
+                    card.addView(label(studentName + " • " + item.optString("entry_date"), 16f, navy, true))
+                    card.addView(label("Work done", 12f, blue, true).apply { setPadding(0, dp(6), 0, dp(2)) })
+                    card.addView(label(item.optString("work_done"), 14f, ink))
+                    for ((field, caption) in listOf(
+                        "tools_used" to "Tools",
+                        "skills_learned" to "Skills learned",
+                        "challenges" to "Challenges",
+                        "recommendations" to "Recommendations"
+                    )) {
+                        val value = item.optString(field)
+                        if (value.isNotBlank()) card.addView(label("$caption: $value", 12f, ink).apply {
+                            setPadding(0, dp(4), 0, 0)
+                        })
+                    }
+                    val comments = addField(card, "Supervisor feedback", item.optString("supervisor_comments"), true)
+                    card.addView(label(
+                        if (item.isNull("supervisor_signed_at")) "Awaiting review" else "Reviewed " + item.optString("supervisor_signed_at"),
+                        11f, if (item.isNull("supervisor_signed_at")) Color.rgb(174, 105, 20) else green, true
+                    ).apply { setPadding(0, dp(7), 0, dp(5)) })
+                    card.addView(actionButton("Save daily feedback and mark reviewed", blue).apply {
+                        setOnClickListener {
+                            isEnabled = false
+                            lifecycleScope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        val api = SupabaseApi(this@MainActivity)
+                                        val fresh = api.ensureFreshSession(currentSession ?: session)
+                                        api.saveDailyReview(fresh, entryId, comments.text.toString().trim())
+                                        sessionStore.save(fresh)
+                                        currentSession = fresh
+                                    }
+                                    Toast.makeText(this@MainActivity, "Daily report review saved.", Toast.LENGTH_LONG).show()
+                                    showSupervisorReviews()
+                                } catch (e: Exception) {
+                                    isEnabled = true
+                                    Toast.makeText(this@MainActivity, e.message ?: "Could not save daily feedback.", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }, matchWrap())
+                    queue.addView(card, matchWrap())
+                }
+
+                queue.addView(label("WEEKLY SUMMARIES", 13f, blue, true).apply {
+                    setPadding(0, dp(16), 0, dp(8))
+                })
+                for (i in 0 until weekly.length()) {
+                    val item = weekly.getJSONObject(i)
                     val summaryId = item.optString("id")
                     val student = item.optJSONObject("student")
                     val studentName = student?.optString("full_name").orEmpty()
                         .ifBlank { "Student " + item.optString("student_id").take(8) }
                     val card = panel()
-                    card.addView(label(studentName, 17f, navy, true))
-                    card.addView(label("Week starting " + item.optString("week_start"), 12f, blue, true).apply {
-                        setPadding(0, dp(4), 0, dp(8))
-                    })
-                    card.addView(label("Work completed", 12f, ink, true))
-                    card.addView(label(item.optString("summary"), 14f, ink).apply { setPadding(0, dp(4), 0, dp(8)) })
+                    card.addView(label(studentName + " • week of " + item.optString("week_start"), 16f, navy, true))
+                    card.addView(label("Work completed", 12f, blue, true).apply { setPadding(0, dp(6), 0, dp(2)) })
+                    card.addView(label(item.optString("summary"), 14f, ink))
                     val skills = item.optString("skills_learned")
                     val challenges = item.optString("challenges")
-                    if (skills.isNotBlank()) card.addView(label("Skills learned: " + skills, 12f, ink).apply { setPadding(0, 0, 0, dp(5)) })
-                    if (challenges.isNotBlank()) card.addView(label("Challenges: " + challenges, 12f, ink).apply { setPadding(0, 0, 0, dp(5)) })
-                    val comments = addField(card, "Supervisor comments", item.optString("supervisor_comments"), true)
+                    if (skills.isNotBlank()) card.addView(label("Skills learned: " + skills, 12f, ink).apply {
+                        setPadding(0, dp(5), 0, 0)
+                    })
+                    if (challenges.isNotBlank()) card.addView(label("Challenges: " + challenges, 12f, ink).apply {
+                        setPadding(0, dp(5), 0, 0)
+                    })
+                    val comments = addField(card, "Supervisor feedback", item.optString("supervisor_comments"), true)
                     card.addView(label(
-                        if (item.isNull("supervisor_signed_at")) "Not reviewed" else "Previously reviewed",
-                        12f, if (item.isNull("supervisor_signed_at")) Color.rgb(174, 105, 20) else green, true
-                    ).apply { setPadding(0, dp(6), 0, dp(6)) })
-                    val saveButton = actionButton("Save review and mark reviewed", blue)
-                    saveButton.setOnClickListener {
-                        saveButton.isEnabled = false
-                        lifecycleScope.launch {
-                            try {
-                                withContext(Dispatchers.IO) {
-                                    val api = SupabaseApi(this@MainActivity)
-                                    val fresh = api.ensureFreshSession(currentSession ?: session)
-                                    sessionStore.save(fresh)
-                                    api.saveWeeklyReview(fresh, summaryId, comments.text.toString().trim())
+                        if (item.isNull("supervisor_signed_at")) "Awaiting review" else "Reviewed " + item.optString("supervisor_signed_at"),
+                        11f, if (item.isNull("supervisor_signed_at")) Color.rgb(174, 105, 20) else green, true
+                    ).apply { setPadding(0, dp(7), 0, dp(5)) })
+                    card.addView(actionButton("Save weekly feedback and mark reviewed", blue).apply {
+                        setOnClickListener {
+                            isEnabled = false
+                            lifecycleScope.launch {
+                                try {
+                                    withContext(Dispatchers.IO) {
+                                        val api = SupabaseApi(this@MainActivity)
+                                        val fresh = api.ensureFreshSession(currentSession ?: session)
+                                        api.saveWeeklyReview(fresh, summaryId, comments.text.toString().trim())
+                                        sessionStore.save(fresh)
+                                        currentSession = fresh
+                                    }
+                                    Toast.makeText(this@MainActivity, "Weekly review saved.", Toast.LENGTH_LONG).show()
+                                    showSupervisorReviews()
+                                } catch (e: Exception) {
+                                    isEnabled = true
+                                    Toast.makeText(this@MainActivity, e.message ?: "Could not save weekly review.", Toast.LENGTH_LONG).show()
                                 }
-                                Toast.makeText(this@MainActivity, "Supervisor review saved.", Toast.LENGTH_LONG).show()
-                                showSupervisorReviews()
-                            } catch (e: Exception) {
-                                saveButton.isEnabled = true
-                                Toast.makeText(this@MainActivity, e.message ?: "Could not save review.", Toast.LENGTH_LONG).show()
                             }
                         }
-                    }
-                    card.addView(saveButton, matchWrap())
+                    }, matchWrap())
                     queue.addView(card, matchWrap())
                 }
             } catch (e: Exception) {
-                message.text = e.message ?: "Could not load assigned reviews. Check your connection and supervisor assignment."
+                message.text = e.message ?: "Could not load assigned reviews. Check the organisation and supervisor assignments."
             }
         }
     }
