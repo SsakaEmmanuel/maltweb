@@ -163,16 +163,15 @@ class MainActivity : Activity() {
         lifecycleScope.launch {
             try {
                 val session = withContext(Dispatchers.IO) {
-                    val api = SupabaseApi(this@MainActivity)
-                    val newSession = api.signIn(email, password)
-                    sessionStore.save(newSession)
-                    api.ensureStudentProfile(newSession, email)
-                    newSession
+                    SupabaseApi(this@MainActivity).signIn(email, password).also { sessionStore.save(it) }
                 }
                 currentSession = session
-                withContext(Dispatchers.IO) { db.entries().claimLocalEntries(session.userId) }
                 updateAccountUi()
                 observeEntries(session.userId)
+                withContext(Dispatchers.IO) {
+                    db.entries().claimLocalEntries(session.userId)
+                    SupabaseApi(this@MainActivity).ensureStudentProfile(session, email)
+                }
                 SyncScheduler.syncNow(this@MainActivity)
                 authMessage.text = "Signed in. Pending entries will sync when internet is available."
                 authMessage.setTextColor(Color.rgb(35, 91, 70))
