@@ -568,6 +568,328 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun addDataTable(parent: LinearLayout, headers: List<String>, rows: List<List<String>>) {
+        val horizontal = HorizontalScrollView(this).apply { isFillViewport = true }
+        val table = TableLayout(this).apply { isStretchAllColumns = false }
+        val head = TableRow(this).apply { setBackgroundColor(navy) }
+        headers.forEach { value ->
+            head.addView(tableCell(value, true), TableRow.LayoutParams(dp(160), -2))
+        }
+        table.addView(head)
+        if (rows.isEmpty()) {
+            val empty = TableRow(this)
+            empty.addView(tableCell("No data available yet.", false), TableRow.LayoutParams(dp(250), -2))
+            table.addView(empty)
+        } else rows.forEachIndexed { index, values ->
+            val row = TableRow(this).apply { setBackgroundColor(if (index % 2 == 0) Color.WHITE else Color.rgb(247, 249, 253)) }
+            headers.indices.forEach { column ->
+                row.addView(tableCell(values.getOrElse(column) { "" }, false), TableRow.LayoutParams(dp(160), -2))
+            }
+            table.addView(row)
+            table.addView(View(this).apply { setBackgroundColor(Color.rgb(225, 230, 238)) },
+                TableLayout.LayoutParams(-1, dp(1)))
+        }
+        horizontal.addView(table)
+        parent.addView(horizontal, matchWrap())
+    }
+
+    private fun showOrganizationWorkspace() {
+        activeScreen = "organization"
+        screenHost.removeAllViews()
+        addPageHeader("Organisation dashboard", "Manage members, review reports, assign supervisors and award marks.")
+        val session = currentSession
+        val organizationId = currentProfile?.optString("organization_id").orEmpty()
+        if (session == null || organizationId.isBlank()) {
+            screenHost.addView(label("This account is not linked to an organisation.", 14f, Color.rgb(170, 55, 40)))
+            return
+        }
+        val keyCard = panel()
+        keyCard.addView(label("ORGANISATION KEY", 12f, blue, true))
+        val savedKey = getSharedPreferences("elogbook_org_keys", MODE_PRIVATE).getString(organizationId, null)
+        keyCard.addView(label(if (savedKey.isNullOrBlank()) "If your original key is lost, generate a new one. Old keys stop working." else "Save this key and share it only with verified organisation members.", 13f, ink).apply { setPadding(0, dp(5), 0, dp(8)) })
+        if (!savedKey.isNullOrBlank()) keyCard.addView(label(savedKey, 19f, navy, true))
+        keyCard.addView(actionButton("Generate a new organisation key", blue).apply {
+            setOnClickListener {
+                isEnabled = false
+                lifecycleScope.launch {
+                    try {
+                        val result = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).rotateOrganizationKey(currentSession ?: session) }
+                            ?: throw java.io.IOException("No key returned.")
+                        val key = result.optString("organization_key")
+                        getSharedPreferences("elogbook_org_keys", MODE_PRIVATE).edit().putString(organizationId, key).apply()
+                        AlertDialog.Builder(this@MainActivity).setTitle("New organisation key")
+                            .setMessage("Save this key and share it only with verified members. Previous key no longer works:\n\n" + key)
+                            .setPositiveButton("Saved", null).show()
+                        showOrganizationWorkspace()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, e.message ?: "Could not rotate key.", Toast.LENGTH_LONG).show()
+                        isEnabled = true
+                    }
+                }
+            }
+        }, matchWrap())
+        screenHost.addView(keyCard, matchWrap())
+
+        val membersCard = panel()
+        membersCard.addView(label("ORGANISATION MEMBERS", 12f, blue, true))
+        screenHost.addView(membersCard, matchWrap())
+        lifecycleScope.launch {
+            try {
+                val memberData = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchOrganizationMembers(session, organizationId) }
+                val students = ArrayList<JSONObject>()
+                val supervisors = ArrayList<JSONObject>()
+                val supervisorRows = ArrayList<List<String>>()
+                val studentRows = ArrayList<List<String>>()
+                for (i in 0 until memberData.length()) {
+                    val p = memberData.getJSONObject(i)
+                    when (p.optString("role")) {
+                        "student" -> {
+                            students.add(p)
+                            studentRows.add(listOf(p.optString("full_name"), p.optString("student_number"), p.optString("course"), p.optString("gender"), p.optString("approval_status")))
+                        }
+                        "field_supervisor", "institution_supervisor" -> {
+                            supervisors.add(p)
+                            supervisorRows.add(listOf(p.optString("full_name"), p.optString("role").replace("_", " "), p.optString("course"), p.optString("approval_status")))
+                        }
+                    }
+                }
+                membersCard.addView(label("Registered supervisors", 17f, navy, true).apply { setPadding(0, dp(12), 0, dp(5)) })
+                addDataTable(membersCard, listOf("Name", "Role", "Course", "Approval"), supervisorRows)
+                supervisors.filter { it.optString("approval_status") == "pending" }.forEach { supervisor ->
+                    val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+                    row.addView(label(supervisor.optString("full_name"), 13f, ink).apply { layoutParams = LinearLayout.LayoutParams(0, -2, 1f) })
+                    row.addView(actionButton("Approve", blue).apply {
+                        setOnClickListener { reviewSupervisor(supervisor.optString("id"), true) }
+                    })
+                    row.addView(actionButton("Reject", navy).apply {
+                        setOnClickListener { reviewSupervisor(supervisor.optString("id"), false) }
+                    })
+                    membersCard.addView(row, matchWrap())
+                }
+                membersCard.addView(label("Registered students", 17f, navy, true).apply { setPadding(0, dp(16), 0, dp(5)) })
+                addDataTable(membersCard, listOf("Student", "Index number", "Course", "Gender", "Status"), studentRows)
+
+                val assignCard = panel()
+                assignCard.addView(label("ASSIGN A SUPERVISOR", 12f, blue, true))
+                val studentSpinner = Spinner(this@MainActivity)
+                studentSpinner.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                    students.map { it.optString("full_name") + " • " + it.optString("student_number") })
+                assignCard.addView(label("Student", 13f, ink, true))
+                assignCard.addView(studentSpinner, matchWrap())
+                val approved = supervisors.filter { it.optString("approval_status") == "approved" }
+                val supervisorSpinner = Spinner(this@MainActivity)
+                supervisorSpinner.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                    approved.map { it.optString("full_name") + " • " + it.optString("role").replace("_", " ") })
+                assignCard.addView(label("Approved supervisor", 13f, ink, true))
+                assignCard.addView(supervisorSpinner, matchWrap())
+                val typeSpinner = Spinner(this@MainActivity)
+                typeSpinner.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                    listOf("Field supervisor", "Institution supervisor"))
+                assignCard.addView(label("Assignment type", 13f, ink, true))
+                assignCard.addView(typeSpinner, matchWrap())
+                assignCard.addView(actionButton("Assign supervisor", blue).apply {
+                    setOnClickListener {
+                        val studentId = students.getOrNull(studentSpinner.selectedItemPosition)?.optString("id").orEmpty()
+                        val supervisor = approved.getOrNull(supervisorSpinner.selectedItemPosition)
+                        if (studentId.isBlank() || supervisor == null) {
+                            Toast.makeText(this@MainActivity, "Choose a student and an approved supervisor.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        val type = if (typeSpinner.selectedItemPosition == 0) "field_supervisor" else "institution_supervisor"
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    SupabaseApi(this@MainActivity).assignOrganizationSupervisor(currentSession ?: session, studentId, supervisor.optString("id"), type)
+                                }
+                                Toast.makeText(this@MainActivity, "Supervisor assigned.", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, e.message ?: "Assignment failed.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }, matchWrap())
+                screenHost.addView(assignCard, matchWrap())
+
+                val reportsCard = panel()
+                reportsCard.addView(label("STUDENT DAILY REPORTS", 12f, blue, true))
+                val ids = students.map { it.optString("id") }
+                val (daily, weekly, attendance, marks) = withContext(Dispatchers.IO) {
+                    val api = SupabaseApi(this@MainActivity)
+                    QuadReports(
+                        api.fetchReportsForStudents(session, ids, false),
+                        api.fetchReportsForStudents(session, ids, true),
+                        api.fetchAttendanceForStudents(session, ids),
+                        api.fetchOrganizationMarks(session, ids)
+                    )
+                }
+                val studentNames = students.associate { it.optString("id") to it.optString("full_name") }
+                val dailyRows = ArrayList<List<String>>()
+                for (i in 0 until daily.length()) {
+                    val r = daily.getJSONObject(i)
+                    dailyRows.add(listOf(studentNames[r.optString("student_id")].orEmpty(), r.optString("entry_date"), r.optString("work_done"), r.optString("tools_used"), r.optString("skills_learned"), r.optString("supervisor_comments")))
+                }
+                addDataTable(reportsCard, listOf("Student", "Date", "Work done", "Tools", "Skills", "Supervisor feedback"), dailyRows)
+                reportsCard.addView(label("WEEKLY SUMMARIES", 12f, blue, true).apply { setPadding(0, dp(16), 0, dp(5)) })
+                val weeklyRows = ArrayList<List<String>>()
+                for (i in 0 until weekly.length()) {
+                    val r = weekly.getJSONObject(i)
+                    weeklyRows.add(listOf(studentNames[r.optString("student_id")].orEmpty(), r.optString("week_start"), r.optString("summary"), r.optString("skills_learned"), r.optString("supervisor_comments"), if (r.isNull("supervisor_signed_at")) "Pending" else "Reviewed"))
+                }
+                addDataTable(reportsCard, listOf("Student", "Week starting", "Summary", "Skills", "Feedback", "Review"), weeklyRows)
+                reportsCard.addView(label("ATTENDANCE", 12f, blue, true).apply { setPadding(0, dp(16), 0, dp(5)) })
+                val attendanceRows = ArrayList<List<String>>()
+                for (i in 0 until attendance.length()) {
+                    val r = attendance.getJSONObject(i)
+                    attendanceRows.add(listOf(studentNames[r.optString("student_id")].orEmpty(), r.optString("attendance_date"), r.optString("status"), r.optString("remarks")))
+                }
+                addDataTable(reportsCard, listOf("Student", "Date", "Status", "Remarks"), attendanceRows)
+                reportsCard.addView(label("PERFORMANCE MARKS", 12f, blue, true).apply { setPadding(0, dp(16), 0, dp(5)) })
+                val marksRows = ArrayList<List<String>>()
+                for (i in 0 until marks.length()) {
+                    val r = marks.getJSONObject(i)
+                    marksRows.add(listOf(studentNames[r.optString("student_id")].orEmpty(), r.optString("score"), r.optString("category"), r.optString("feedback"), r.optString("created_at").take(10)))
+                }
+                addDataTable(reportsCard, listOf("Student", "Score /100", "Category", "Feedback", "Date"), marksRows)
+                screenHost.addView(reportsCard, matchWrap())
+
+                val markCard = panel()
+                markCard.addView(label("AWARD STUDENT MARKS", 12f, blue, true))
+                val markStudent = Spinner(this@MainActivity)
+                markStudent.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, students.map { it.optString("full_name") })
+                markCard.addView(markStudent, matchWrap())
+                val score = addField(markCard, "Score (0–100)", "", false)
+                val category = addField(markCard, "Category", "General performance", false)
+                val feedback = addField(markCard, "Feedback", "", true)
+                markCard.addView(actionButton("Save performance marks", blue).apply {
+                    setOnClickListener {
+                        val person = students.getOrNull(markStudent.selectedItemPosition)
+                        val scoreValue = score.text.toString().toDoubleOrNull()
+                        if (person == null || scoreValue == null || scoreValue < 0 || scoreValue > 100) {
+                            Toast.makeText(this@MainActivity, "Choose a student and enter a score from 0 to 100.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).awardMark(currentSession ?: session, person.optString("id"), scoreValue, category.text.toString().ifBlank { "General performance" }, feedback.text.toString()) }
+                                Toast.makeText(this@MainActivity, "Performance marks awarded.", Toast.LENGTH_LONG).show()
+                                showOrganizationWorkspace()
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, e.message ?: "Could not award marks.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }, matchWrap())
+                screenHost.addView(markCard, matchWrap())
+            } catch (e: Exception) {
+                membersCard.addView(label(e.message ?: "Could not load organisation data.", 13f, Color.rgb(170, 55, 40)))
+            }
+        }
+    }
+
+    private data class QuadReports(
+        val daily: JSONArray,
+        val weekly: JSONArray,
+        val attendance: JSONArray,
+        val marks: JSONArray
+    )
+
+    private fun reviewSupervisor(profileId: String, approve: Boolean) {
+        val session = currentSession ?: return
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).reviewOrganizationSupervisor(session, profileId, approve) }
+                Toast.makeText(this@MainActivity, if (approve) "Supervisor approved." else "Supervisor rejected.", Toast.LENGTH_LONG).show()
+                showOrganizationWorkspace()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, e.message ?: "Could not update supervisor status.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun showSupervisorTools() {
+        activeScreen = "supervisorTools"
+        screenHost.removeAllViews()
+        addPageHeader("Attendance and marks", "Record attendance and reward performance for assigned students.")
+        val session = currentSession
+        if (session == null) return
+        val container = panel()
+        container.addView(label("Loading assigned students…", 13f, ink))
+        screenHost.addView(container, matchWrap())
+        lifecycleScope.launch {
+            try {
+                val students = withContext(Dispatchers.IO) {
+                    SupabaseApi(this@MainActivity).fetchAssignedStudentProfiles(session, currentRole)
+                }
+                container.removeAllViews()
+                if (students.length() == 0) {
+                    container.addView(label("No students are assigned to you yet. Ask your organisation to make an assignment.", 14f, ink))
+                    return@launch
+                }
+                val studentIds = ArrayList<String>()
+                val studentNames = ArrayList<String>()
+                for (i in 0 until students.length()) {
+                    val s = students.getJSONObject(i)
+                    studentIds.add(s.optString("id"))
+                    studentNames.add(s.optString("full_name") + " • " + s.optString("course"))
+                }
+                val choice = Spinner(this@MainActivity)
+                choice.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, studentNames)
+                container.addView(label("Student", 13f, ink, true))
+                container.addView(choice, matchWrap())
+                val day = addField(container, "Attendance date (YYYY-MM-DD)", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()), false)
+                val attendanceState = Spinner(this@MainActivity)
+                attendanceState.adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Present", "Late", "Absent", "Excused"))
+                container.addView(label("Attendance status", 13f, ink, true))
+                container.addView(attendanceState, matchWrap())
+                val remarks = addField(container, "Attendance remarks", "", true)
+                container.addView(actionButton("Save attendance", blue).apply {
+                    setOnClickListener {
+                        val id = studentIds.getOrNull(choice.selectedItemPosition).orEmpty()
+                        val date = day.text.toString().trim()
+                        if (id.isBlank() || !date.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}"))) {
+                            Toast.makeText(this@MainActivity, "Choose a student and valid date.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        val state = listOf("present", "late", "absent", "excused")[attendanceState.selectedItemPosition]
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).saveAttendance(currentSession ?: session, id, date, state, remarks.text.toString()) }
+                                Toast.makeText(this@MainActivity, "Attendance saved.", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, e.message ?: "Could not save attendance.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }, matchWrap())
+                container.addView(label("Performance marks", 16f, navy, true).apply { setPadding(0, dp(18), 0, dp(5)) })
+                val score = addField(container, "Score (0–100)", "", false)
+                val category = addField(container, "Category", "General performance", false)
+                val feedback = addField(container, "Feedback", "", true)
+                container.addView(actionButton("Award marks", blue).apply {
+                    setOnClickListener {
+                        val id = studentIds.getOrNull(choice.selectedItemPosition).orEmpty()
+                        val n = score.text.toString().toDoubleOrNull()
+                        if (id.isBlank() || n == null || n < 0 || n > 100) {
+                            Toast.makeText(this@MainActivity, "Choose a student and score from 0 to 100.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        lifecycleScope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).awardMark(currentSession ?: session, id, n, category.text.toString().ifBlank { "General performance" }, feedback.text.toString()) }
+                                Toast.makeText(this@MainActivity, "Marks saved.", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, e.message ?: "Could not save marks.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }, matchWrap())
+            } catch (e: Exception) {
+                container.removeAllViews()
+                container.addView(label(e.message ?: "Could not load assigned students.", 13f, Color.rgb(170, 55, 40)))
+            }
+        }
+    }
+
     private fun addPageHeader(title: String, subtitle: String) {
         screenHost.addView(actionButton("‹ Dashboard", navy).apply { setOnClickListener { showHome() } })
         screenHost.addView(label(title, 25f, navy, true).apply { setPadding(0, dp(16), 0, dp(4)) })
