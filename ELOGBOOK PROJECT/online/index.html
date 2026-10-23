@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#10223d">
-  <title>E-Logbook | Attachment Records</title>
+  <title>E-Logbook | Attachment Management</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script><script defer src="app.js"></script>
@@ -12,39 +12,97 @@
 <header class="top"><div class="brand-mark">EL</div><div><strong>E-Logbook</strong><small>Industrial Attachment Record</small></div><span id="connection" class="pill">Checking setup…</span></header>
 <main>
 <section id="authPanel" class="panel auth">
-  <p class="eyebrow">YOUR ATTACHMENT, ORGANIZED</p><h1>Keep your logbook up to date.</h1>
-  <p class="muted">Sign in to sync daily work, weekly summaries and supervisor feedback across your devices.</p>
-  <form id="authForm"><label>Email address<input id="email" type="email" autocomplete="email" required></label><label>Password<input id="password" type="password" autocomplete="current-password" minlength="6" required></label><div class="actions"><button type="submit" id="signIn">Sign in</button><button type="button" class="secondary" id="signUp">Create student account</button></div></form>
+  <p class="eyebrow">YOUR ATTACHMENT, ORGANIZED</p><h1>One logbook. Your whole organisation.</h1>
+  <p class="muted">Record daily work, review progress, track attendance and recognise achievement.</p>
+  <form id="authForm">
+    <label>Email address<input id="email" type="email" autocomplete="email" required></label>
+    <label>Password<input id="password" type="password" autocomplete="current-password" minlength="6" required></label>
+    <div class="actions"><button type="submit" id="signIn">Sign in</button><button type="button" class="secondary" id="showCreate">Create an account</button></div>
+  </form>
   <p id="authMessage" class="message" role="status"></p>
 </section>
+
+<section id="registrationPanel" class="panel auth" hidden>
+  <div class="section-head"><div><p class="eyebrow">ACCOUNT REGISTRATION</p><h1 id="registrationTitle">Create your account</h1></div><button id="cancelRegistration" type="button" class="secondary">Back</button></div>
+  <p id="registrationIntro" class="muted">Choose the account type and enter your organisation details. All roles use the same account system on the website and Android app.</p>
+  <form id="registrationForm">
+    <label>Account type
+      <select id="regRole" required>
+        <option value="student">Student</option>
+        <option value="field_supervisor">Field supervisor</option>
+        <option value="institution_supervisor">Institution supervisor</option>
+        <option value="organization_admin">Organisation account (school / institution)</option>
+      </select>
+    </label>
+    <label>Full names<input id="regName" autocomplete="name" maxlength="140" required></label>
+    <label>Gender
+      <select id="regGender" required><option value="">Choose gender</option><option value="female">Female</option><option value="male">Male</option><option value="prefer_not_to_say">Prefer not to say</option></select>
+    </label>
+    <div id="regCourseWrap"><label>Course / subject<input id="regCourse" maxlength="140" placeholder="e.g. Computer Science"></label></div>
+    <div id="regStudentNumberWrap"><label>Student / index number<input id="regStudentNumber" maxlength="80" placeholder="Your institutional index number"></label></div>
+    <div id="regOrganizationNameWrap" hidden><label>Organisation name<input id="regOrganizationName" maxlength="180" placeholder="Official school or institution name"></label></div>
+    <div id="regMemberOrganizationWrap">
+      <label>Organisation
+        <select id="regOrganizationId"><option value="">Loading organisations…</option></select>
+      </label>
+      <label>Organisation key<input id="regOrganizationKey" autocomplete="off" maxlength="80" placeholder="Provided by your organisation"></label>
+      <p class="muted small">Your organisation must already be registered. Supervisors remain pending until the organisation approves them.</p>
+    </div>
+    <div id="registrationCredentials">
+      <label>Account email<input id="regEmail" type="email" autocomplete="email" required></label>
+      <label>Password (at least 6 characters)<input id="regPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+    </div>
+    <div class="actions"><button id="submitRegistration" type="submit">Create account</button></div>
+  </form>
+  <p id="registrationMessage" class="message" role="status"></p>
+</section>
+
 <section id="appPanel" hidden>
-  <div class="welcome"><div><p class="eyebrow">STUDENT WORKSPACE</p><h1>Your logbook</h1><p class="muted">Records save to the online database when configured and connected.</p></div><button id="signOut" class="secondary">Sign out</button></div>
-  <div class="stats"><div class="stat"><span>Daily records</span><strong id="dailyCount">0</strong></div><div class="stat"><span>Sync status</span><strong id="syncState">Online</strong></div></div>
-  <div id="studentPanel">
-  <section class="panel"><h2>Daily work entry</h2><form id="entryForm">
-    <div class="two"><label>Date<input id="entryDate" type="date" required></label><label>Tools / equipment used<input id="toolsUsed" maxlength="200"></label></div>
-    <label>Work done today<textarea id="workDone" rows="4" required maxlength="8000"></textarea></label>
-    <label>Skills or lessons learned<textarea id="skillsLearned" rows="3" maxlength="4000"></textarea></label>
-    <label>Challenges encountered<textarea id="challenges" rows="2" maxlength="4000"></textarea></label>
-    <label>Recommendations<textarea id="recommendations" rows="2" maxlength="4000"></textarea></label>
-    <div class="actions"><button type="submit">Save daily entry</button><button type="button" id="refresh" class="secondary">Refresh records</button></div>
-  </form><p id="entryMessage" class="message" role="status"></p></section>
-  <section class="panel"><h2>Weekly summary</h2><p class="muted">Summarize your activities for the week. Your supervisor can review the saved summary.</p><form id="weeklyForm">
-    <div class="two"><label>Week starting (Monday)<input id="weekStart" type="date" required></label><label>Skills learned<textarea id="weeklySkills" rows="2" maxlength="4000"></textarea></label></div>
-    <label>Summary of work completed<textarea id="weeklySummary" rows="4" required maxlength="8000"></textarea></label>
-    <label>Challenges and solutions<textarea id="weeklyChallenges" rows="3" maxlength="4000"></textarea></label>
-    <div class="actions"><button type="submit">Save weekly summary</button><button type="button" id="refreshWeekly" class="secondary">Refresh summaries</button></div>
-  </form><p id="weeklyMessage" class="message" role="status"></p></section>
-  <section class="panel"><div class="section-head"><h2>Saved weekly summaries</h2><span class="muted">Student entries and review status</span></div><div id="weeklyEntries" class="entries"><p class="muted">No summaries loaded yet.</p></div></section>
-  <section class="panel"><div class="section-head"><h2>Recent daily entries</h2><span id="recordHint" class="muted">Your records only</span></div><div id="entries" class="entries"><p class="muted">No entries loaded yet.</p></div></section>
-  </div>
-  <section id="supervisorPanel" class="panel" hidden>
-    <div class="section-head"><div><p class="eyebrow">SUPERVISOR WORKSPACE</p><h2>Weekly report review queue</h2></div><button type="button" id="refreshReviews" class="secondary">Refresh</button></div>
-    <p class="muted">Review only reports for students assigned to your supervisor account. Add comments and mark a report reviewed.</p>
-    <p id="reviewMessage" class="message" role="status"></p>
-    <div id="reviewQueue" class="entries"><p class="muted">Loading assigned reports…</p></div>
+  <div class="welcome"><div><p id="workspaceEyebrow" class="eyebrow">WORKSPACE</p><h1 id="workspaceTitle">Your logbook</h1><p id="workspaceDescription" class="muted">Keep attachment records up to date.</p></div><button id="signOut" class="secondary">Sign out</button></div>
+  <div class="stats"><div class="stat"><span>Daily records</span><strong id="dailyCount">0</strong></div><div class="stat"><span>Account / sync status</span><strong id="syncState">Online</strong></div></div>
+
+  <section id="pendingApprovalPanel" class="panel" hidden><h2>Awaiting organisation approval</h2><p>Your supervisor account has been registered. The organisation must approve it before you can access student records, write reviews or award marks.</p><p id="pendingOrgName" class="muted"></p></section>
+
+  <section id="studentPanel" hidden>
+    <section class="panel"><h2>Daily work entry</h2><form id="entryForm">
+      <div class="two"><label>Date<input id="entryDate" type="date" required></label><label>Tools / equipment used<input id="toolsUsed" maxlength="200"></label></div>
+      <label>Work done today<textarea id="workDone" rows="4" required maxlength="8000"></textarea></label>
+      <label>Skills or lessons learned<textarea id="skillsLearned" rows="3" maxlength="4000"></textarea></label>
+      <label>Challenges encountered<textarea id="challenges" rows="2" maxlength="4000"></textarea></label>
+      <label>Recommendations<textarea id="recommendations" rows="2" maxlength="4000"></textarea></label>
+      <div class="actions"><button type="submit">Save daily entry</button><button type="button" id="refresh">Refresh records</button><button type="button" class="secondary" id="toggleDailyTable">View saved entries as table</button></div>
+    </form><p id="entryMessage" class="message" role="status"></p></section>
+    <section class="panel"><h2>Weekly summary</h2><form id="weeklyForm">
+      <div class="two"><label>Week starting (Monday)<input id="weekStart" type="date" required></label><label>Skills learned<textarea id="weeklySkills" rows="2" maxlength="4000"></textarea></label></div>
+      <label>Summary of work completed<textarea id="weeklySummary" rows="4" required maxlength="8000"></textarea></label>
+      <label>Challenges and solutions<textarea id="weeklyChallenges" rows="3" maxlength="4000"></textarea></label>
+      <div class="actions"><button type="submit">Save weekly summary</button><button type="button" id="refreshWeekly" class="secondary">Refresh summaries</button><button type="button" class="secondary" id="toggleWeeklyTable">View weekly reports as table</button></div>
+    </form><p id="weeklyMessage" class="message" role="status"></p></section>
+    <section class="panel"><div class="section-head"><h2>My saved records</h2><span class="muted">Entries, feedback and review status</span></div><div id="entries" class="table-wrap"></div><div id="weeklyEntries" class="table-wrap"></div></section>
+    <section class="panel"><h2>Attendance and performance</h2><p id="studentPerformanceMessage" class="muted">Your attendance and awarded marks will appear here.</p><div id="studentMarks" class="table-wrap"></div></section>
+    <section class="panel"><h2>Course ranking</h2><p class="muted">Ranking is based on recorded performance marks for students in your organisation and course.</p><div id="studentRankings" class="table-wrap"></div></section>
+  </section>
+
+  <section id="supervisorPanel" hidden>
+    <section class="panel"><div class="section-head"><div><p class="eyebrow">SUPERVISOR WORKSPACE</p><h2>Assigned student reporting</h2></div><button type="button" class="secondary" id="refreshReviews">Refresh</button></div>
+      <p class="muted">Review student submissions without changing their original report text.</p><p id="reviewMessage" class="message" role="status"></p><div id="reviewQueue" class="table-wrap"></div>
+    </section>
+    <section class="panel"><h2>Attendance</h2><p class="muted">Record attendance for students assigned to you.</p><div class="two"><label>Student<select id="attendanceStudent"></select></label><label>Date<input id="attendanceDate" type="date"></label></div><label>Status<select id="attendanceStatus"><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="excused">Excused</option></select></label><label>Remarks<textarea id="attendanceRemarks" rows="2"></textarea></label><button type="button" id="saveAttendance">Save attendance</button><p id="attendanceMessage" class="message" role="status"></p>
+    </section>
+    <section class="panel"><h2>Award performance marks</h2><div class="two"><label>Student<select id="markStudent"></select></label><label>Score (0–100)<input id="markScore" type="number" min="0" max="100" step="0.5"></label></div><label>Category<input id="markCategory" value="General performance"></label><label>Feedback<textarea id="markFeedback" rows="2"></textarea></label><button type="button" id="saveSupervisorMark">Award marks</button><p id="supervisorMarkMessage" class="message" role="status"></p>
+    </section>
+  </section>
+
+  <section id="organizationPanel" hidden>
+    <section class="panel"><p class="eyebrow">ORGANISATION MANAGEMENT</p><h2>Organisation key</h2><p class="muted">Share this key only with verified staff and students who belong to your organisation.</p><button type="button" id="revealOrgKey">Show organisation key</button><p id="orgKeyDisplay" class="key-display" hidden></p><button type="button" class="secondary" id="copyOrgKey" hidden>Copy key</button></section>
+    <section class="panel"><h2>Registered supervisors</h2><p class="muted">Approve or reject supervisor registration requests for your organisation.</p><div id="organizationSupervisors" class="table-wrap"></div></section>
+    <section class="panel"><h2>Registered students</h2><p class="muted">View student courses, index numbers, activity records and reporting progress.</p><div id="organizationStudents" class="table-wrap"></div></section>
+    <section class="panel"><h2>Assign a supervisor</h2><div class="two"><label>Student<select id="assignStudent"></select></label><label>Approved supervisor<select id="assignSupervisor"></select></label></div><label>Supervisor type<select id="assignType"><option value="field_supervisor">Field supervisor</option><option value="institution_supervisor">Institution supervisor</option></select></label><button id="saveAssignment" type="button">Assign supervisor</button><p id="assignmentMessage" class="message" role="status"></p></section>
+    <section class="panel"><h2>Organisation attendance</h2><div id="organizationAttendance" class="table-wrap"></div></section>
+    <section class="panel"><h2>Organisation performance and rankings</h2><div id="organizationPerformance" class="table-wrap"></div></section>
+    <section class="panel"><h2>Award student marks</h2><div class="two"><label>Student<select id="orgMarkStudent"></select></label><label>Score (0–100)<input id="orgMarkScore" type="number" min="0" max="100" step="0.5"></label></div><label>Category<input id="orgMarkCategory" value="General performance"></label><label>Feedback<textarea id="orgMarkFeedback" rows="2"></textarea></label><button id="saveOrgMark" type="button">Award marks</button><p id="orgMarkMessage" class="message" role="status"></p></section>
   </section>
 </section>
-<footer>Keep your records accurate and ask your supervisor to review them regularly.</footer>
+<footer>Clear records. Fair reviews. Shared progress.</footer>
 </main>
 </body></html>
