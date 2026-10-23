@@ -8,13 +8,13 @@ import java.io.IOException
 internal class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val store = SessionStore(applicationContext)
-        var session = store.read() ?: return Result.success() // Keep local pending items until sign-in.
+        var session = store.read() ?: return Result.success()
         val dao = LogbookDatabase.get(applicationContext).entries()
         return try {
             val api = SupabaseApi(applicationContext)
             session = api.ensureFreshSession(session)
+            api.ensureStudentProfile(session)
             val pending = dao.pendingSync(session.userId)
-            if (pending.isEmpty()) return Result.success()
             for (entry in pending) {
                 api.uploadDailyEntry(session, entry)
                 dao.markSynced(entry.id)
