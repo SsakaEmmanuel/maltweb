@@ -233,6 +233,14 @@ internal class SupabaseApi(private val context: Context) {
         )
     }
 
+    fun fetchMyDailyReviews(session: AuthSession): JSONArray {
+        return request(
+            "GET",
+            "/rest/v1/daily_entries?select=entry_date,supervisor_comments,supervisor_signed_at&student_id=eq.${session.userId}&limit=300",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected daily-review status response.")
+    }
+
     fun fetchMyWeeklyReviews(session: AuthSession): JSONArray {
         return request(
             "GET",
