@@ -18,7 +18,18 @@
     if (error) return say("authMessage",error.message);
     currentUser = session?.user || null;
     $("authPanel").hidden = !!currentUser; $("appPanel").hidden = !currentUser;
-    if (currentUser) await loadEntries();
+    if (currentUser) { await ensureProfile(); await loadEntries(); }
+  }
+  async function ensureProfile() {
+    if (!client || !currentUser) return;
+    const {data,error} = await client.from("profiles").select("id").eq("id",currentUser.id).maybeSingle();
+    if (error) { say("entryMessage","Profile check failed: "+error.message); return; }
+    if (!data) {
+      const fallback = (currentUser.email || "student").split("@")[0];
+      const fullName = (currentUser.user_metadata && currentUser.user_metadata.full_name) || fallback;
+      const {error:insertError} = await client.from("profiles").insert({id:currentUser.id,full_name:fullName,role:"student"});
+      if (insertError) say("entryMessage","Account profile could not be created: "+insertError.message);
+    }
   }
   $("authForm").addEventListener("submit", async e => {
     e.preventDefault(); if (!client) return;
