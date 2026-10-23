@@ -380,10 +380,10 @@ class MainActivity : ComponentActivity() {
                     if (entry.supervisorComments.isNotBlank()) details.addView(label("Supervisor feedback: " + entry.supervisorComments, 12f, ink).apply { setPadding(0, dp(4), 0, 0) })
                     if (!entry.supervisorReviewedAt.isNullOrBlank()) details.addView(label("Reviewed: " + entry.supervisorReviewedAt, 10f, green, true).apply { setPadding(0, dp(4), 0, 0) })
                     details.addView(label(if (entry.syncStatus == "synced") "SYNCED" else "PENDING SYNC", 10f, if (entry.syncStatus == "synced") green else Color.rgb(174, 105, 20), true).apply { setPadding(0, dp(4), 0, 0) })
+                    details.addView(label("Tap to view/edit", 10f, blue, true).apply { setPadding(0, dp(4), 0, 0) })
                     row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
                     row.setOnClickListener { showEntry(entry) }
                     row.isClickable = true
-                    row.addView(label("Tap to edit", 10f, blue, true).apply { setPadding(dp(8), dp(4), dp(8), dp(4)) })
                     table.addView(row)
                     table.addView(View(this@MainActivity).apply { setBackgroundColor(Color.rgb(225, 230, 238)) }, LinearLayout.LayoutParams(-1, dp(1)))
                 }
