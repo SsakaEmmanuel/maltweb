@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var recommendationsField: EditText
     private lateinit var sessionStore: SessionStore
     private var currentSession: AuthSession? = null
+    private var currentRole: String = "student"
     private var entriesJob: Job? = null
     private var weeklyJob: Job? = null
     private lateinit var weeklyList: LinearLayout
@@ -119,7 +120,7 @@ class MainActivity : ComponentActivity() {
         }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("E-LOGBOOK", 12f, blue, true))
-        titles.addView(label("Student workspace", 24f, navy, true))
+        titles.addView(label(if (currentRole == "field_supervisor" || currentRole == "institution_supervisor") "Supervisor workspace" else "Student workspace", 24f, navy, true))
         top.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(actionButton("Sign out", navy).apply { setOnClickListener { signOut() } })
         screenHost.addView(top)
@@ -149,6 +150,9 @@ class MainActivity : ComponentActivity() {
         addNavigationCard("＋", "New daily record", "Capture today's work, tools and skills", "entry")
         addNavigationCard("▤", "Saved records", "View your daily entries in a table", "records")
         addNavigationCard("▦", "Weekly reports", "Weekly summaries and supervisor review", "weekly")
+        if (currentRole == "field_supervisor" || currentRole == "institution_supervisor") {
+            addNavigationCard("✓", "Supervisor reviews", "Review weekly reports from assigned students", "reviews")
+        }
     }
 
     private fun addNavigationCard(symbol: String, title: String, subtitle: String, destination: String) {
@@ -171,6 +175,7 @@ class MainActivity : ComponentActivity() {
             "entry" -> showEntry()
             "records" -> showRecords()
             "weekly" -> showWeekly()
+            "reviews" -> showSupervisorReviews()
         } }
         screenHost.addView(card, matchWrap())
     }
