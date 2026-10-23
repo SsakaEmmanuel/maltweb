@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [LogbookEntry::class, WeeklySummary::class], version = 2, exportSchema = false)
+@Database(entities = [LogbookEntry::class, WeeklySummary::class], version = 3, exportSchema = false)
 abstract class LogbookDatabase : RoomDatabase() {
     abstract fun entries(): LogbookDao
     abstract fun weeklies(): WeeklySummaryDao
@@ -22,9 +22,16 @@ abstract class LogbookDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE daily_entries ADD COLUMN supervisorComments TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE daily_entries ADD COLUMN supervisorReviewedAt TEXT")
+            }
+        }
+
         fun get(context: Context): LogbookDatabase = INSTANCE ?: synchronized(this) {
             INSTANCE ?: Room.databaseBuilder(context.applicationContext, LogbookDatabase::class.java, "elogbook-local.db")
-                .addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
         }
     }
 }
