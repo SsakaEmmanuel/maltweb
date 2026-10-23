@@ -36,22 +36,25 @@ internal class SessionStore(context: Context) {
         prefs.edit().putString("session", Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
     }
 
-    fun read(): AuthSession? = try {
-        val packed = Base64.decode(prefs.getString("session", null) ?: return null, Base64.NO_WRAP)
-        if (packed.size <= 12) return null
-        val iv = packed.copyOfRange(0, 12)
-        val encrypted = packed.copyOfRange(12, packed.size)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(128, iv))
-        val json = JSONObject(String(cipher.doFinal(encrypted), Charsets.UTF_8))
-        AuthSession(
-            userId = json.getString("userId"),
-            accessToken = json.getString("accessToken"),
-            refreshToken = json.getString("refreshToken"),
-            expiresAt = json.optLong("expiresAt", 0L)
-        )
-    } catch (_: Exception) {
-        null
+    fun read(): AuthSession? {
+        return try {
+            val encoded = prefs.getString("session", null) ?: return null
+            val packed = Base64.decode(encoded, Base64.NO_WRAP)
+            if (packed.size <= 12) return null
+            val iv = packed.copyOfRange(0, 12)
+            val encrypted = packed.copyOfRange(12, packed.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(128, iv))
+            val json = JSONObject(String(cipher.doFinal(encrypted), Charsets.UTF_8))
+            AuthSession(
+                userId = json.getString("userId"),
+                accessToken = json.getString("accessToken"),
+                refreshToken = json.getString("refreshToken"),
+                expiresAt = json.optLong("expiresAt", 0L)
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun clear() { prefs.edit().remove("session").apply() }
