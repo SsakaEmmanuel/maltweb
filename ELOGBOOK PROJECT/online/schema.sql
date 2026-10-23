@@ -83,8 +83,8 @@ create policy "student profile owner updates own profile" on public.profiles for
 -- Students own their records. Supervisor review policies are added only after
 -- trusted admin-managed assignments and role provisioning are configured.
 create policy "student reads own placements" on public.placements for select to authenticated using (student_id = (select auth.uid()));
-create policy "student creates own placements" on public.placements for insert to authenticated with check (student_id = (select auth.uid()));
-create policy "student updates own placements" on public.placements for update to authenticated using (student_id = (select auth.uid())) with check (student_id = (select auth.uid()));
+create policy "student creates own unassigned placements" on public.placements for insert to authenticated with check (student_id = (select auth.uid()) and field_supervisor_id is null and institution_supervisor_id is null);
+create policy "student updates own unassigned placements" on public.placements for update to authenticated using (student_id = (select auth.uid()) and field_supervisor_id is null and institution_supervisor_id is null) with check (student_id = (select auth.uid()) and field_supervisor_id is null and institution_supervisor_id is null);
 create policy "student deletes own placements" on public.placements for delete to authenticated using (student_id = (select auth.uid()));
 
 create policy "student reads own daily entries" on public.daily_entries for select to authenticated using (student_id = (select auth.uid()));
