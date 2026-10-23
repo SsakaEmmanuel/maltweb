@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10223d">
+  <title>E-Logbook | Attachment Records</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+<header class="top"><div class="brand-mark">EL</div><div><strong>E-Logbook</strong><small>Industrial Attachment Record</small></div><span id="connection" class="pill">Checking setup…</span></header>
+<main>
+<section id="authPanel" class="panel auth">
+  <p class="eyebrow">YOUR ATTACHMENT, ORGANIZED</p><h1>Keep your logbook up to date.</h1>
+  <p class="muted">Sign in to sync daily work, weekly summaries and supervisor feedback across your devices.</p>
+  <form id="authForm"><label>Email address<input id="email" type="email" autocomplete="email" required></label><label>Password<input id="password" type="password" autocomplete="current-password" minlength="6" required></label><div class="actions"><button type="submit" id="signIn">Sign in</button><button type="button" class="secondary" id="signUp">Create student account</button></div></form>
+  <p id="authMessage" class="message" role="status"></p>
+</section>
+<section id="appPanel" hidden>
+  <div class="welcome"><div><p class="eyebrow">STUDENT WORKSPACE</p><h1>Your logbook</h1><p class="muted">Records save to the online database when configured and connected.</p></div><button id="signOut" class="secondary">Sign out</button></div>
+  <div class="stats"><div class="stat"><span>Daily records</span><strong id="dailyCount">0</strong></div><div class="stat"><span>Sync status</span><strong id="syncState">Online</strong></div></div>
+  <section class="panel"><h2>Daily work entry</h2><form id="entryForm">
+    <div class="two"><label>Date<input id="entryDate" type="date" required></label><label>Tools / equipment used<input id="toolsUsed" maxlength="200"></label></div>
+    <label>Work done today<textarea id="workDone" rows="4" required maxlength="8000"></textarea></label>
+    <label>Skills or lessons learned<textarea id="skillsLearned" rows="3" maxlength="4000"></textarea></label>
+    <label>Challenges encountered<textarea id="challenges" rows="2" maxlength="4000"></textarea></label>
+    <label>Recommendations<textarea id="recommendations" rows="2" maxlength="4000"></textarea></label>
+    <div class="actions"><button type="submit">Save daily entry</button><button type="button" id="refresh" class="secondary">Refresh records</button></div>
+  </form><p id="entryMessage" class="message" role="status"></p></section>
+  <section class="panel"><div class="section-head"><h2>Recent entries</h2><span id="recordHint" class="muted">Your records only</span></div><div id="entries" class="entries"><p class="muted">No entries loaded yet.</p></div></section>
+</section>
+<footer>Keep your records accurate and ask your supervisor to review them regularly.</footer>
+</main>
+</body></html>
