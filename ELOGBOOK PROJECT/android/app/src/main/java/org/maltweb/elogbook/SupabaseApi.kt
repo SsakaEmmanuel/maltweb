@@ -221,6 +221,42 @@ internal class SupabaseApi(private val context: Context) {
         ) as? JSONArray ?: throw IOException("Unexpected weekly-review status response.")
     }
 
+    fun fetchAssignedStudentProfiles(session: AuthSession, assignmentType: String): JSONArray {
+        val assignments = request(
+            "GET", "/rest/v1/supervisor_assignments?select=student_id,assignment_type&supervisor_id=eq.${session.userId}",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected supervisor assignment response.")
+        val ids = ArrayList<String>()
+        for (i in 0 until assignments.length()) {
+            val row = assignments.optJSONObject(i) ?: continue
+            if (row.optString("assignment_type") == assignmentType) ids.add(row.optString("student_id"))
+        }
+        if (ids.isEmpty()) return JSONArray()
+        return request(
+            "GET", "/rest/v1/profiles?select=id,full_name,course,student_number& id=in.(" + ids.joinToString(",") + ")".replace("& id","&id"),
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected assigned students response.")
+    }
+
+    fun fetchReportsForStudents(session: AuthSession, studentIds: List<String>, weekly: Boolean): JSONArray {
+        if (studentIds.isEmpty()) return JSONArray()
+        val table = if (weekly) "weekly_summaries" else "daily_entries"
+        val select = if (weekly) "id,student_id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at" else "id,student_id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations,supervisor_comments,supervisor_signed_at"
+        val dateField = if (weekly) "week_start" else "entry_date"
+        return request(
+            "GET", "/rest/v1/$table?select=$select&student_id=in.(" + studentIds.joinToString(",") + ")&order=$dateField.desc&limit=500",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected report list response.")
+    }
+
+    fun fetchAttendanceForStudents(session: AuthSession, studentIds: List<String>): JSONArray {
+        if (studentIds.isEmpty()) return JSONArray()
+        return request(
+            "GET", "/rest/v1/attendance_records?select=student_id,attendance_date,status,remarks&student_id=in.(" + studentIds.joinToString(",") + ")&order=attendance_date.desc&limit=500",
+            token = session.accessToken
+        ) as? JSONArray ?: throw IOException("Unexpected attendance response.")
+    }
+
     private fun request(
         method: String,
         path: String,
