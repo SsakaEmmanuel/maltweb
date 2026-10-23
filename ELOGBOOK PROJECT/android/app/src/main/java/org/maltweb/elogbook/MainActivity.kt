@@ -88,13 +88,20 @@ class MainActivity : ComponentActivity() {
                     val roleResult = withContext(Dispatchers.IO) {
                         val api = SupabaseApi(this@MainActivity)
                         val fresh = api.ensureFreshSession(restoredSession)
-                        api.ensureStudentProfile(fresh, restoredSession.email)
-                        Pair(fresh, api.fetchProfileRole(fresh))
+                        Pair(fresh, api.fetchProfile(fresh))
                     }
                     currentSession = roleResult.first
+                    currentProfile = roleResult.second
                     sessionStore.save(roleResult.first)
-                    currentRole = roleResult.second
-                    if (currentSession?.userId == restoredSession.userId) showHome()
+                    currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
+                    if (currentSession?.userId == restoredSession.userId) {
+                        if (currentRole == "unregistered") {
+                            showAuth()
+                            registrationFields.visibility = View.VISIBLE
+                            registrationAction.text = "Complete registration"
+                            authMessage.text = "Choose your account type and complete your organisation details."
+                        } else showHome()
+                    }
                 } catch (_: Exception) {
                     // Keep existing local records available when opening without a connection.
                 }
