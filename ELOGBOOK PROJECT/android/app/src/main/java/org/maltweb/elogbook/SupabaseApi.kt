@@ -87,6 +87,26 @@ internal class SupabaseApi(private val context: Context) {
         )
     }
 
+ 
+    fun uploadWeeklySummary(session: AuthSession, weekStart: String, summary: String, skills: String, challenges: String) {
+        val timestamp = java.time.Instant.now().toString()
+        val payload = JSONArray().put(
+            JSONObject()
+                .put("student_id", session.userId)
+                .put("week_start", weekStart)
+                .put("summary", summary)
+                .put("skills_learned", skills)
+                .put("challenges", challenges)
+                .put("client_updated_at", timestamp)
+                .put("updated_at", timestamp)
+        )
+        request(
+            "POST", "/rest/v1/weekly_summaries?on_conflict=student_id%2Cweek_start",
+            payload, token = session.accessToken,
+            prefer = "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
     private fun request(
         method: String,
         path: String,
