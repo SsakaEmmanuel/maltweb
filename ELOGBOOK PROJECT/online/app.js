@@ -1,203 +1,54 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const configured = window.ELOGBOOK_CONFIG && /^https:\/\//.test(window.ELOGBOOK_CONFIG.supabaseUrl) && !window.ELOGBOOK_CONFIG.supabaseUrl.includes("PASTE_") && window.ELOGBOOK_CONFIG.supabaseAnonKey && !window.ELOGBOOK_CONFIG.supabaseAnonKey.includes("PASTE_");
-  let client = null, currentUser = null, currentRole = "student";
-  const say = (id, message, ok=false) => { $(id).textContent = message; $(id).classList.toggle("ok",ok); };
-  const today = new Date();
-  const localDate = new Date(today.getTime()-today.getTimezoneOffset()*60000).toISOString().slice(0,10);
-  $("entryDate").value = localDate;
-  const monday = new Date(today); monday.setDate(today.getDate()-((today.getDay()+6)%7));
-  $("weekStart").value = new Date(monday.getTime()-monday.getTimezoneOffset()*60000).toISOString().slice(0,10);
-  if (configured && window.supabase) {
-    client = window.supabase.createClient(window.ELOGBOOK_CONFIG.supabaseUrl, window.ELOGBOOK_CONFIG.supabaseAnonKey);
-    $("connection").textContent = "Online portal";
-  } else {
-    $("connection").textContent = "Setup required";
-    say("authMessage","The portal is ready, but it needs the dedicated E-Logbook database URL and publishable key in config.js.");
-    $("signIn").disabled = $("signUp").disabled = true;
-  }
-  async function showSession() {
-    if (!client) return;
-    const {data:{session},error} = await client.auth.getSession();
-    if (error) return say("authMessage",error.message);
-    currentUser = session?.user || null;
-    $("authPanel").hidden = !!currentUser; $("appPanel").hidden = !currentUser;
-    if (!currentUser) {
-      currentRole = "student";
-      $("studentPanel").hidden = false;
-      $("supervisorPanel").hidden = true;
-      return;
-    }
-    await ensureProfile();
-    const canReview = currentRole === "field_supervisor" || currentRole === "institution_supervisor";
-    $("studentPanel").hidden = canReview;
-    $("supervisorPanel").hidden = !canReview;
-    await loadEntries();
-    await loadWeekly();
-    if (canReview) await loadReviewQueue();
-  }
-  async function ensureProfile() {
-    if (!client || !currentUser) return;
-    const {data,error} = await client.from("profiles").select("id,role,full_name").eq("id",currentUser.id).maybeSingle();
-    if (error) { say("entryMessage","Profile check failed: "+error.message); return; }
-    if (data) {
-      currentRole = data.role || "student";
-      return;
-    }
-    if (!data) {
-      const fallback = (currentUser.email || "student").split("@")[0];
-      const fullName = (currentUser.user_metadata && currentUser.user_metadata.full_name) || fallback;
-      const {error:insertError} = await client.from("profiles").insert({id:currentUser.id,full_name:fullName,role:"student"});
-      if (insertError) say("entryMessage","Account profile could not be created: "+insertError.message);
-      else currentRole = "student";
-    }
-  }
-  $("authForm").addEventListener("submit", async e => {
-    e.preventDefault(); if (!client) return;
-    $("signIn").disabled = true; say("authMessage","Signing in…");
-    const {error} = await client.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});
-    $("signIn").disabled = false;
-    if (error) say("authMessage",error.message); else {say("authMessage","Signed in.",true);await showSession();}
+  const configured = window.ELOGBOOK_CONFIG && /^https:\/\//.test(window.ELOGBOOK_CONFIG.supabaseUrl) && window.ELOGBOOK_CONFIG.supabaseAnonKey && !window.ELOGBOOK_CONFIG.supabaseAnonKey.includes("PASTE_");
+  let client=null,currentUser=null,currentProfile=null,currentRole="student",organizationMembers=[],assignedStudents=[];
+  const say=(id,message,ok=false)=>{const el=$(id);if(!el)return;el.textContent=message;el.classList.toggle("ok",ok);};
+  const escapeHtml=value=>String(value==null?"":value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const dateToday=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
+  const mondayOfWeek=()=>{const d=new Date();d.setDate(d.getDate()-((d.getDay()+6)%7));return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
+  $("entryDate").value=dateToday();$("weekStart").value=mondayOfWeek();$("attendanceDate").value=dateToday();
+  if(configured&&window.supabase){client=window.supabase.createClient(window.ELOGBOOK_CONFIG.supabaseUrl,window.ELOGBOOK_CONFIG.supabaseAnonKey);$("connection").textContent="Online portal";}
+  else{$("connection").textContent="Setup required";say("authMessage","The portal needs its dedicated E-Logbook database configuration.");$("signIn").disabled=$("showCreate").disabled=true;}
+  const roleName=role=>({"student":"Student","field_supervisor":"Field supervisor","institution_supervisor":"Institution supervisor","organization_admin":"Organisation administrator","admin":"Administrator"}[role]||"Member");
+  const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
+  const addCell=(row,value,header)=>{const cell=document.createElement(header?"th":"td");cell.textContent=value==null?"":String(value);row.append(cell);return cell;};
+  function makeTable(headers,rows){const wrap=el("div",undefined,"table-wrap");if(!rows.length){wrap.append(el("p","No records to display yet.","muted"));return wrap;}const table=el("table");const thead=el("thead");const hr=el("tr");headers.forEach(h=>addCell(hr,h,true));thead.append(hr);table.append(thead);const tbody=el("tbody");rows.forEach(values=>{const tr=el("tr");values.forEach(v=>{const td=el("td");if(v instanceof Node)td.append(v);else td.textContent=v==null?"":String(v);tr.append(td);});tbody.append(tr);});table.append(tbody);wrap.append(table);return wrap;}
+  async function fetchOrganizations(selected){if(!client)return;const {data,error}=await client.from("organizations").select("id,name").order("name");const select=$("regOrganizationId");select.replaceChildren();select.append(new Option("Choose organisation",""));if(error){select.append(new Option("Could not load organisations",""));return;}for(const org of data||[])select.append(new Option(org.name,org.id));if(selected)select.value=selected;}
+  function syncRoleFields(){const r=$("regRole").value;const org=r==="organization_admin";const student=r==="student";$("regOrganizationNameWrap").hidden=!org;$("regMemberOrganizationWrap").hidden=org;$("regStudentNumberWrap").hidden=!student;$("regCourseWrap").hidden=org;$("regStudentNumber").required=student;$("regCourse").required=r==="field_supervisor"||r==="institution_supervisor";$("regOrganizationName").required=org;$("regOrganizationId").required=!org;$("regOrganizationKey").required=!org;$("registrationTitle").textContent=org?"Register an organisation":r==="student"?"Create student account":"Create supervisor account";$("registrationIntro").textContent=org?"Register your school or institution first. A unique organisation key will be generated once and shown to you.":r==="student"?"Enter your course, student/index number and organisation details.":"Enter your course or subject and organisation key. Your organisation must approve your supervisor account before you can review reports."; }
+  function fillRegistrationFromMetadata(meta){if(!meta)return;if(meta.full_name)$("regName").value=meta.full_name;if(meta.role&&["student","field_supervisor","institution_supervisor","organization_admin"].includes(meta.role))$("regRole").value=meta.role;if(meta.gender)$("regGender").value=meta.gender;if(meta.course)$("regCourse").value=meta.course;if(meta.student_number)$("regStudentNumber").value=meta.student_number;if(meta.organization_name)$("regOrganizationName").value=meta.organization_name;syncRoleFields();fetchOrganizations(meta.organization_id);}
+  $("regRole").addEventListener("change",syncRoleFields);
+  $("showCreate").addEventListener("click",async()=>{await fetchOrganizations();$("authPanel").hidden=true;$("registrationPanel").hidden=false;$("registrationCredentials").hidden=false;$("cancelRegistration").hidden=false;$("regEmail").value=$("email").value;$("regPassword").value=$("password").value;syncRoleFields();});
+  $("cancelRegistration").addEventListener("click",()=>{if(currentUser){showSession();return;}$("registrationPanel").hidden=true;$("authPanel").hidden=false;});
+  $("authForm").addEventListener("submit",async e=>{e.preventDefault();if(!client)return;$("signIn").disabled=true;say("authMessage","Signing in…");try{const {error}=await client.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(error)throw error;await showSession();}catch(err){say("authMessage",err.message||"Sign-in failed.");}finally{$("signIn").disabled=false;}});
+  $("registrationForm").addEventListener("submit",async e=>{e.preventDefault();if(!client)return;const draft={full_name:$("regName").value.trim(),role:$("regRole").value,gender:$("regGender").value,course:$("regCourse").value.trim(),student_number:$("regStudentNumber").value.trim(),organization_id:$("regOrganizationId").value,organization_key:$("regOrganizationKey").value.trim(),organization_name:$("regOrganizationName").value.trim()};if(!draft.full_name||!draft.gender)return say("registrationMessage","Enter your full name and choose a gender.");if(draft.role==="organization_admin"&&!draft.organization_name)return say("registrationMessage","Enter the organisation name.");if(draft.role!=="organization_admin"&&(!draft.organization_id||!draft.organization_key))return say("registrationMessage","Choose your organisation and enter its organisation key.");if(draft.role==="student"&&!draft.student_number)return say("registrationMessage","Enter your student/index number.");if(["field_supervisor","institution_supervisor"].includes(draft.role)&&!draft.course)return say("registrationMessage","Enter the course or subject you supervise.");
+    const btn=$("submitRegistration");btn.disabled=true;say("registrationMessage",currentUser?"Completing registration…":"Creating account…");
+    try{if(!currentUser){const email=$("regEmail").value.trim(),password=$("regPassword").value;if(!email||password.length<6)throw new Error("Enter a valid email and password of at least 6 characters.");const metadata={full_name:draft.full_name,role:draft.role,gender:draft.gender,course:draft.course,student_number:draft.student_number,organization_id:draft.organization_id||null,organization_name:draft.organization_name};const {data,error}=await client.auth.signUp({email,password,options:{data:metadata,emailRedirectTo:window.location.origin+window.location.pathname}});if(error)throw error;if(!data.session){say("registrationMessage","Account created. Confirm your email, then sign in. Your details are saved; re-enter the organisation key if prompted.",true);$("registrationCredentials").hidden=true;return;}currentUser=data.user;}await completeRegistration(draft);}catch(err){say("registrationMessage",err.message||"Registration failed.");}finally{btn.disabled=false;}
   });
-  $("signUp").addEventListener("click", async () => {
-    if (!client) return;
-    $("signUp").disabled = true; say("authMessage","Creating account…");
-    const {data,error} = await client.auth.signUp({email:$("email").value.trim(),password:$("password").value,options:{emailRedirectTo:window.location.origin+window.location.pathname}});
-    $("signUp").disabled = false;
-    if (error) say("authMessage",error.message);
-    else if (!data.session) say("authMessage","Account created. Check your email to confirm it, then sign in.",true);
-    else {say("authMessage","Account created.",true);await showSession();}
-  });
-  $("signOut").addEventListener("click", async () => { if (client) {await client.auth.signOut();currentUser=null;await showSession();} });
-  $("refresh").addEventListener("click",loadEntries);
-  $("refreshWeekly").addEventListener("click",loadWeekly);
-  $("weeklyForm").addEventListener("submit", saveWeekly);
-  $("refreshReviews").addEventListener("click",loadReviewQueue);
-  $("entryForm").addEventListener("submit",async e=>{
-    e.preventDefault(); if (!client || !currentUser) return;
-    const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-    if(!row.work_done) return say("entryMessage","Please describe the work done today.");
-    say("entryMessage","Saving…");
-    const {error}=await client.from("daily_entries").upsert(row,{onConflict:"student_id,entry_date"});
-    if(error) say("entryMessage","Could not save: "+error.message);
-    else {say("entryMessage","Daily entry saved online.",true);$("workDone").value=$("toolsUsed").value=$("skillsLearned").value=$("challenges").value=$("recommendations").value="";await loadEntries();}
-  });
-
-  async function saveWeekly(e) {
-    e.preventDefault(); if (!client || !currentUser) return;
-    const weekStart = $("weekStart").value;
-    const summary = $("weeklySummary").value.trim();
-    if (!weekStart || !summary) return say("weeklyMessage","Choose the week starting date and enter your summary.");
-    const {error} = await client.from("weekly_summaries").upsert({
-      student_id: currentUser.id,
-      week_start: weekStart,
-      summary,
-      skills_learned: $("weeklySkills").value.trim(),
-      challenges: $("weeklyChallenges").value.trim(),
-      client_updated_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }, {onConflict:"student_id,week_start"});
-    if (error) return say("weeklyMessage","Could not save weekly summary: "+error.message);
-    say("weeklyMessage","Weekly summary saved online.",true);
-    $("weeklySummary").value = $("weeklySkills").value = $("weeklyChallenges").value = "";
-    await loadWeekly();
+  async function completeRegistration(d){if(!currentUser)throw new Error("Sign in before completing registration.");if(d.role==="organization_admin"){const {data,error}=await client.rpc("create_logbook_organization",{p_full_name:d.full_name,p_organization_name:d.organization_name,p_gender:d.gender});if(error)throw error;const item=Array.isArray(data)?data[0]:data;if(!item||!item.organization_key)throw new Error("Organisation created, but the key could not be returned. Contact support before sharing access.");sessionStorage.setItem("elogbook-org-key-"+item.organization_id,item.organization_key);say("registrationMessage","Organisation created successfully. Save this key and share it only with verified members: "+item.organization_key,true);$("registrationPanel").hidden=false;$("registrationCredentials").hidden=true;$("registrationTitle").textContent="Organisation created — save your key";$("registrationIntro").textContent="Copy this key now. For security, it is not stored in readable form in the database."; $("registrationForm").hidden=true;return;}
+    const {error}=await client.rpc("register_logbook_member",{p_full_name:d.full_name,p_role:d.role,p_gender:d.gender,p_course:d.course||null,p_student_number:d.student_number||null,p_organization_id:d.organization_id,p_organization_key:d.organization_key});if(error)throw error;await showSession();
   }
-  async function loadWeekly() {
-    if (!client || !currentUser) return;
-    const {data,error} = await client.from("weekly_summaries")
-      .select("id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at,updated_at")
-      .eq("student_id",currentUser.id).order("week_start",{ascending:false}).limit(30);
-    if (error) { $("weeklyEntries").textContent = "Could not load weekly summaries: "+error.message; return; }
-    $("weeklyEntries").replaceChildren();
-    if (!data.length) {
-      const p=document.createElement("p"); p.className="muted"; p.textContent="No weekly summaries yet. Complete your first summary above."; $("weeklyEntries").append(p); return;
-    }
-    for (const item of data) {
-      const card=document.createElement("article"); card.className="entry";
-      const h=document.createElement("h3"); h.textContent="Week starting "+new Date(item.week_start+"T12:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); card.append(h);
-      for (const [label,value] of [["Summary",item.summary],["Skills learned",item.skills_learned],["Challenges",item.challenges],["Supervisor comments",item.supervisor_comments]]) {
-        if(value){const p=document.createElement("p");p.textContent=label+": "+value;card.append(p);}
-      }
-      const state=document.createElement("p");state.textContent=item.supervisor_signed_at?"Review status: Reviewed":"Review status: Awaiting supervisor review";card.append(state);
-      $("weeklyEntries").append(card);
-    }
-  }
-  async function loadReviewQueue() {
-    if (!client || !currentUser || !["field_supervisor","institution_supervisor"].includes(currentRole)) return;
-    say("reviewMessage","Loading your assigned students…");
-    $("reviewQueue").replaceChildren();
-    const {data: assignments,error: assignmentError} = await client.from("supervisor_assignments")
-      .select("student_id,assignment_type").eq("supervisor_id",currentUser.id);
-    if (assignmentError) return say("reviewMessage","Could not load supervisor assignments: "+assignmentError.message);
-    const assignedIds = [...new Set((assignments || [])
-      .filter(a => a.assignment_type === currentRole).map(a => a.student_id))];
-    if (!assignedIds.length) {
-      say("reviewMessage","No students are assigned to this supervisor account yet.");
-      return;
-    }
-    const [profileResult,summaryResult] = await Promise.all([
-      client.from("profiles").select("id,full_name").in("id",assignedIds),
-      client.from("weekly_summaries")
-        .select("id,student_id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at")
-        .in("student_id",assignedIds).order("week_start",{ascending:false}).limit(100)
-    ]);
-    if (profileResult.error) return say("reviewMessage","Could not load student names: "+profileResult.error.message);
-    if (summaryResult.error) return say("reviewMessage","Could not load weekly reports: "+summaryResult.error.message);
-    const names = Object.fromEntries((profileResult.data || []).map(p => [p.id,p.full_name || "Student"]));
-    $("reviewQueue").replaceChildren();
-    const summaries = summaryResult.data || [];
-    if (!summaries.length) {
-      say("reviewMessage","Your assigned students do not have weekly summaries yet.");
-      return;
-    }
-    say("reviewMessage",summaries.length+" weekly report(s) assigned to you.");
-    for (const item of summaries) {
-      const card=document.createElement("article"); card.className="entry review-entry";
-      const heading=document.createElement("h3"); heading.textContent=names[item.student_id] || "Assigned student"; card.append(heading);
-      const week=document.createElement("p"); week.textContent="Week starting "+new Date(item.week_start+"T12:00:00").toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}); card.append(week);
-      for (const [label,value] of [["Work completed",item.summary],["Skills learned",item.skills_learned],["Challenges",item.challenges]]) {
-        if (value) { const p=document.createElement("p"); p.textContent=label+": "+value; card.append(p); }
-      }
-      const fieldLabel=document.createElement("label"); fieldLabel.textContent="Supervisor comments";
-      const comments=document.createElement("textarea"); comments.rows=3; comments.maxLength=4000; comments.value=item.supervisor_comments || "";
-      fieldLabel.append(comments); card.append(fieldLabel);
-      const state=document.createElement("p"); state.textContent=item.supervisor_signed_at
-        ? "Reviewed on "+new Date(item.supervisor_signed_at).toLocaleString()
-        : "Awaiting supervisor review";
-      card.append(state);
-      const save=document.createElement("button"); save.type="button"; save.textContent="Save review and mark reviewed";
-      save.addEventListener("click",async()=>{
-        save.disabled=true; say("reviewMessage","Saving supervisor review…");
-        const {error}=await client.from("weekly_summaries").update({
-          supervisor_comments:comments.value.trim(),
-          supervisor_signed_at:new Date().toISOString(),
-          updated_at:new Date().toISOString()
-        }).eq("id",item.id);
-        save.disabled=false;
-        if(error){say("reviewMessage","Review could not be saved: "+error.message);return;}
-        say("reviewMessage","Supervisor review saved.",true);
-        await loadReviewQueue();
-      });
-      card.append(save); $("reviewQueue").append(card);
-    }
-  }
-
-  async function loadEntries(){
-    if(!client||!currentUser)return;
-    $("syncState").textContent=navigator.onLine?"Online":"Offline";
-    const {data,error}=await client.from("daily_entries").select("id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations,updated_at").eq("student_id",currentUser.id).order("entry_date",{ascending:false}).limit(30);
-    if(error){$("entries").textContent="Could not load records: "+error.message;return;}
-    $("dailyCount").textContent=data.length;
-    $("entries").replaceChildren();
-    if(!data.length){const p=document.createElement("p");p.className="muted";p.textContent="No daily entries yet. Add your first record above."; $("entries").append(p);return;}
-    for(const item of data){
-      const card=document.createElement("article");card.className="entry";
-      const h=document.createElement("h3");h.textContent=new Date(item.entry_date+"T12:00:00").toLocaleDateString(undefined,{weekday:"short",year:"numeric",month:"short",day:"numeric"});card.append(h);
-      for(const [label,value] of [["Work done",item.work_done],["Tools used",item.tools_used],["Skills learned",item.skills_learned],["Challenges",item.challenges],["Recommendations",item.recommendations]]) if(value){const p=document.createElement("p");p.textContent=label+": "+value;card.append(p);}
-      $("entries").append(card);
-    }
-  }
-  window.addEventListener("online",()=>{ $("syncState").textContent="Online"; });
-  window.addEventListener("offline",()=>{ $("syncState").textContent="Offline"; });
-  if(client) showSession();
+  $("signOut").addEventListener("click",async()=>{if(client)await client.auth.signOut();currentUser=null;currentProfile=null;$("appPanel").hidden=true;$("registrationPanel").hidden=true;$("authPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=false;$("registrationMessage").textContent="";});
+  $("refresh").addEventListener("click",loadEntries);$("refreshWeekly").addEventListener("click",loadWeekly);$("weeklyForm").addEventListener("submit",saveWeekly);$("refreshReviews").addEventListener("click",loadSupervisorWorkspace);
+  $("toggleDailyTable").addEventListener("click",()=>{const el=$("entries");el.hidden=!el.hidden;$("toggleDailyTable").textContent=el.hidden?"View saved entries as table":"Hide saved entries table";});
+  $("toggleWeeklyTable").addEventListener("click",()=>{const el=$("weeklyEntries");el.hidden=!el.hidden;$("toggleWeeklyTable").textContent=el.hidden?"View weekly reports as table":"Hide weekly reports table";});
+  $("entryForm").addEventListener("submit",async e=>{e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};if(!row.work_done)return say("entryMessage","Please describe the work done today.");say("entryMessage","Saving…");const {error}=await client.from("daily_entries").upsert(row,{onConflict:"student_id,entry_date"});if(error)return say("entryMessage","Could not save: "+error.message);say("entryMessage","Daily entry saved online.",true);["workDone","toolsUsed","skillsLearned","challenges","recommendations"].forEach(id=>$(id).value="");await loadEntries();});
+  async function saveWeekly(e){e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;const weekStart=$("weekStart").value,summary=$("weeklySummary").value.trim();if(!weekStart||!summary)return say("weeklyMessage","Choose the week starting date and enter your summary.");const {error}=await client.from("weekly_summaries").upsert({student_id:currentUser.id,week_start:weekStart,summary,skills_learned:$("weeklySkills").value.trim(),challenges:$("weeklyChallenges").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:"student_id,week_start"});if(error)return say("weeklyMessage","Could not save weekly summary: "+error.message);say("weeklyMessage","Weekly summary saved online.",true);["weeklySummary","weeklySkills","weeklyChallenges"].forEach(id=>$(id).value="");await loadWeekly();}
+  async function showSession(){if(!client)return;const {data:{session},error}=await client.auth.getSession();if(error)return say("authMessage",error.message);currentUser=session&&session.user||null;if(!currentUser){$("authPanel").hidden=false;$("appPanel").hidden=true;$("registrationPanel").hidden=true;return;}const {data:profile,error:profileError}=await client.from("profiles").select("id,full_name,role,organization_id,school_name,student_number,gender,course,approval_status").eq("id",currentUser.id).maybeSingle();if(profileError){say("authMessage","Could not load your profile: "+profileError.message);return;}currentProfile=profile; if(!profile){$("authPanel").hidden=true;$("appPanel").hidden=true;$("registrationPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=true;$("cancelRegistration").hidden=true;fillRegistrationFromMetadata(currentUser.user_metadata||{});say("registrationMessage","Finish your profile registration to open your workspace.");return;}currentRole=profile.role||"student";$("authPanel").hidden=true;$("registrationPanel").hidden=true;$("appPanel").hidden=false;$("workspaceEyebrow").textContent=roleName(currentRole).toUpperCase()+" WORKSPACE";$("workspaceTitle").textContent=(profile.full_name||"Member")+"'s workspace";$("workspaceDescription").textContent=(profile.school_name||"Your organisation is linked")+(profile.course?" • "+profile.course:"");$("dailyCount").textContent="…";$("syncState").textContent=navigator.onLine?"Online":"Offline";const pending=currentRole!=="student"&&profile.approval_status!=="approved";$("pendingApprovalPanel").hidden=!pending;$("studentPanel").hidden=currentRole!=="student";$("supervisorPanel").hidden=pending||!["field_supervisor","institution_supervisor"].includes(currentRole);$("organizationPanel").hidden=currentRole!=="organization_admin";if(pending){$("pendingOrgName").textContent="Organisation: "+(profile.school_name||"linked organisation")+" • Status: "+profile.approval_status;return;}if(currentRole==="student"){await Promise.all([loadEntries(),loadWeekly(),loadStudentMarksAndRankings()]);}else if(currentRole==="organization_admin"){await loadOrganizationWorkspace();}else if(["field_supervisor","institution_supervisor"].includes(currentRole)){await loadSupervisorWorkspace();}}
+  async function loadEntries(){if(!client||!currentUser||currentRole!=="student")return;const {data,error}=await client.from("daily_entries").select("id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations,supervisor_comments,supervisor_signed_at,updated_at").eq("student_id",currentUser.id).order("entry_date",{ascending:false}).limit(200);if(error){$("entries").textContent="Could not load saved entries: "+error.message;return;}const rows=(data||[]).map(d=>[d.entry_date,d.work_done,d.tools_used,d.skills_learned,d.challenges,d.recommendations,d.supervisor_comments||"—",d.supervisor_signed_at?"Reviewed":"Awaiting review"]);$("dailyCount").textContent=String((data||[]).length);$("entries").replaceChildren(makeTable(["Date","Work done","Tools","Skills learned","Challenges","Recommendations","Supervisor feedback","Review"],rows));}
+  async function loadWeekly(){if(!client||!currentUser||currentRole!=="student")return;const {data,error}=await client.from("weekly_summaries").select("week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at,updated_at").eq("student_id",currentUser.id).order("week_start",{ascending:false}).limit(100);if(error){$("weeklyEntries").textContent="Could not load weekly reports: "+error.message;return;}const rows=(data||[]).map(d=>[d.week_start,d.summary,d.skills_learned,d.challenges,d.supervisor_comments||"—",d.supervisor_signed_at?"Reviewed":"Awaiting review"]);$("weeklyEntries").replaceChildren(makeTable(["Week starting","Summary","Skills learned","Challenges","Supervisor feedback","Review"],rows));}
+  async function getAssignmentStudents(){const {data:assignments,error}=await client.from("supervisor_assignments").select("student_id,assignment_type").eq("supervisor_id",currentUser.id);if(error)throw error;const ids=Array.from(new Set((assignments||[]).filter(a=>a.assignment_type===currentRole).map(a=>a.student_id)));if(!ids.length){assignedStudents=[];return [];}const {data:profiles,error:pe}=await client.from("profiles").select("id,full_name,course,student_number,organization_id").in("id",ids);if(pe)throw pe;assignedStudents=profiles||[];return assignedStudents;}
+  async function loadSupervisorWorkspace(){if(!client||!currentUser)return; say("reviewMessage","Loading assigned student reports…");try{const students=await getAssignmentStudents();const ids=students.map(s=>s.id);["attendanceStudent","markStudent"].forEach(id=>setOptions($(id),students,"Choose student"));if(!ids.length){$("reviewQueue").replaceChildren(el("p","No students are assigned to this supervisor yet.","muted"));say("reviewMessage","Ask your organisation administrator to assign students.");return;}const [{data:daily,error:de},{data:weekly,error:we}]=await Promise.all([client.from("daily_entries").select("id,student_id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations").in("student_id",ids).order("entry_date",{ascending:false}).limit(300),client.from("weekly_summaries").select("id,student_id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at").in("student_id",ids).order("week_start",{ascending:false}).limit(300)]);if(de)throw de;if(we)throw we;const names=Object.fromEntries(students.map(s=>[s.id,s.full_name]));const wrap=el("div");wrap.append(el("h3","Daily reports"));wrap.append(makeTable(["Student","Date","Work done","Tools","Skills","Challenges"],(daily||[]).map(d=>[names[d.student_id]||"Student",d.entry_date,d.work_done,d.tools_used,d.skills_learned,d.challenges])));wrap.append(el("h3","Weekly reports — add feedback without editing student text"));const weeklyWrap=el("div",undefined,"review-list");for(const item of weekly||[]){const card=el("article",undefined,"entry");card.append(el("h4",(names[item.student_id]||"Student")+" • week of "+item.week_start));card.append(el("p","Summary: "+item.summary));card.append(el("p","Skills: "+(item.skills_learned||"—")+" • Challenges: "+(item.challenges||"—")));const comments=el("textarea");comments.rows=3;comments.maxLength=4000;comments.value=item.supervisor_comments||"";comments.setAttribute("aria-label","Supervisor comments");card.append(el("label","Supervisor comments"));card.append(comments);card.append(el("p",item.supervisor_signed_at?"Reviewed "+new Date(item.supervisor_signed_at).toLocaleString():"Awaiting review","muted"));const save=el("button","Save feedback and mark reviewed");save.addEventListener("click",async()=>{save.disabled=true;const {error}=await client.from("weekly_summaries").update({supervisor_comments:comments.value.trim(),supervisor_signed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",item.id);save.disabled=false;if(error){say("reviewMessage","Review failed: "+error.message);return;}say("reviewMessage","Review saved.",true);await loadSupervisorWorkspace();});card.append(save);weeklyWrap.append(card);}if(!weekly||!weekly.length)weeklyWrap.append(el("p","No weekly reports submitted yet.","muted"));wrap.append(weeklyWrap);$("reviewQueue").replaceChildren(wrap);say("reviewMessage",daily.length+" daily report(s), "+weekly.length+" weekly report(s) loaded.",true);}catch(err){say("reviewMessage","Could not load supervisor workspace: "+err.message);}}
+  function setOptions(select,items,placeholder){if(!select)return;const old=select.value;select.replaceChildren(new Option(placeholder,""));for(const item of items)select.append(new Option((item.full_name||"Member")+(item.course?" — "+item.course:""),item.id));if(items.some(i=>i.id===old))select.value=old;}
+  async function loadOrganizationWorkspace(){if(!client||!currentProfile)return;try{organizationMembers=[];const orgId=currentProfile.organization_id;if(!orgId)throw new Error("This organisation administrator has no organisation linked.");const {data:profiles,error}=await client.from("profiles").select("id,full_name,role,gender,course,student_number,approval_status,created_at").eq("organization_id",orgId).order("full_name");if(error)throw error;organizationMembers=profiles||[];const supervisors=organizationMembers.filter(p=>["field_supervisor","institution_supervisor"].includes(p.role));const students=organizationMembers.filter(p=>p.role==="student");const supervisorRows=supervisors.map(p=>[p.full_name,p.role==="field_supervisor"?"Field":"Institution",p.course||"—",p.gender||"—",p.approval_status,supervisorActionCell(p)]);$("organizationSupervisors").replaceChildren(makeTable(["Name","Type","Course","Gender","Status","Action"],supervisorRows));const studentRows=students.map(p=>[p.full_name,p.student_number||"—",p.course||"—",p.gender||"—",p.approval_status,p.created_at?new Date(p.created_at).toLocaleDateString():""]);$("organizationStudents").replaceChildren(makeTable(["Student","Index number","Course","Gender","Status","Registered"],studentRows));const approvedSupervisors=supervisors.filter(p=>p.approval_status==="approved");setOptions($("assignStudent"),students,"Choose student");setOptions($("assignSupervisor"),approvedSupervisors,"Choose supervisor");setOptions($("orgMarkStudent"),students,"Choose student");const ids=students.map(s=>s.id);const [dailyRes,weeklyRes,attendanceRes,marksRes]=await Promise.all([ids.length?client.from("daily_entries").select("student_id,entry_date,work_done,updated_at").in("student_id",ids).order("entry_date",{ascending:false}).limit(500):Promise.resolve({data:[],error:null}),ids.length?client.from("weekly_summaries").select("student_id,week_start,summary,supervisor_comments,supervisor_signed_at").in("student_id",ids).order("week_start",{ascending:false}).limit(500):Promise.resolve({data:[],error:null}),ids.length?client.from("attendance_records").select("student_id,attendance_date,status,remarks,recorded_by").in("student_id",ids).order("attendance_date",{ascending:false}).limit(500):Promise.resolve({data:[],error:null}),ids.length?client.from("performance_marks").select("student_id,score,category,feedback,created_at,awarded_by").in("student_id",ids).order("created_at",{ascending:false}).limit(500):Promise.resolve({data:[],error:null})]);for(const rr of [dailyRes,weeklyRes,attendanceRes,marksRes])if(rr.error)throw rr.error;const names=Object.fromEntries(students.map(s=>[s.id,s.full_name]));$("dailyCount").textContent=String(dailyRes.data.length);$("organizationAttendance").replaceChildren(makeTable(["Student","Date","Status","Remarks","Recorded by"],(attendanceRes.data||[]).map(a=>[names[a.student_id]||"Student",a.attendance_date,a.status,a.remarks||"—",a.recorded_by===currentUser.id?"Organisation":"Supervisor"])));const scoreMap={};for(const mark of marksRes.data||[]){if(!scoreMap[mark.student_id])scoreMap[mark.student_id]=[];scoreMap[mark.student_id].push(Number(mark.score));}const rankData=students.map(s=>({name:s.full_name,course:s.course||"—",number:s.student_number||"—",count:(scoreMap[s.id]||[]).length,average:(scoreMap[s.id]||[]).length?(scoreMap[s.id].reduce((a,b)=>a+b,0)/scoreMap[s.id].length).toFixed(1):"—",marks:(scoreMap[s.id]||[])})).sort((a,b)=>(Number(b.average)||0)-(Number(a.average)||0));$("organizationPerformance").replaceChildren(makeTable(["Rank","Student","Index","Course","Marks awarded","Average /100"],rankData.map((r,i)=>[String(i+1),r.name,r.number,r.course,String(r.count),String(r.average)])));if(!sessionStorage.getItem("elogbook-org-key-"+orgId)){$("orgKeyDisplay").hidden=false;$("orgKeyDisplay").textContent="For security, the key is shown only when first created. Use the rotate-key action if it has been lost.";$("copyOrgKey").hidden=true;}$("organizationPanel").hidden=false;}catch(err){say("assignmentMessage","Organisation data could not be loaded: "+err.message);}}
+  function supervisorActionCell(profile){const box=el("div",undefined,"inline-actions");if(profile.approval_status==="pending"){const approve=el("button","Approve");approve.addEventListener("click",()=>reviewSupervisor(profile.id,true));const reject=el("button","Reject","secondary");reject.addEventListener("click",()=>reviewSupervisor(profile.id,false));box.append(approve,reject);}else box.append(el("span",profile.approval_status,"muted"));return box;}
+  async function reviewSupervisor(id,approve){try{const {error}=await client.rpc("organization_review_supervisor",{p_supervisor_id:id,p_approve:approve});if(error)throw error;say("assignmentMessage",approve?"Supervisor approved.":"Supervisor rejected.",true);await loadOrganizationWorkspace();}catch(err){say("assignmentMessage","Could not update supervisor: "+err.message);}}
+  $("saveAssignment").addEventListener("click",async()=>{const student=$("assignStudent").value,supervisor=$("assignSupervisor").value,type=$("assignType").value;if(!student||!supervisor)return say("assignmentMessage","Choose a student and an approved supervisor.");try{const {error}=await client.rpc("organization_assign_supervisor",{p_student_id:student,p_supervisor_id:supervisor,p_assignment_type:type});if(error)throw error;say("assignmentMessage","Supervisor assigned successfully.",true);}catch(err){say("assignmentMessage","Assignment failed: "+err.message);}});
+  async function saveMark(studentId,scoreId,categoryId,feedbackId,messageId){const score=Number($(scoreId).value),category=$(categoryId).value.trim()||"General performance",feedback=$(feedbackId).value.trim();if(!studentId)return say(messageId,"Choose a student.");if(!Number.isFinite(score)||score<0||score>100)return say(messageId,"Enter a score between 0 and 100.");const {error}=await client.from("performance_marks").insert({student_id:studentId,awarded_by:currentUser.id,score,category,feedback});if(error)return say(messageId,"Could not save marks: "+error.message);say(messageId,"Performance marks saved.",true);$(scoreId).value="";$(feedbackId).value="";if(currentRole==="organization_admin")await loadOrganizationWorkspace();else await loadSupervisorWorkspace();}
+  $("saveOrgMark").addEventListener("click",()=>saveMark($("orgMarkStudent").value,"orgMarkScore","orgMarkCategory","orgMarkFeedback","orgMarkMessage"));$("saveSupervisorMark").addEventListener("click",()=>saveMark($("markStudent").value,"markScore","markCategory","markFeedback","supervisorMarkMessage"));
+  $("saveAttendance").addEventListener("click",async()=>{const student=$("attendanceStudent").value,day=$("attendanceDate").value,status=$("attendanceStatus").value,remarks=$("attendanceRemarks").value.trim();if(!student||!day)return say("attendanceMessage","Choose a student and attendance date.");const {error}=await client.from("attendance_records").upsert({student_id:student,attendance_date:day,status,remarks,recorded_by:currentUser.id},{onConflict:"student_id,attendance_date"});if(error)return say("attendanceMessage","Attendance could not be saved: "+error.message);say("attendanceMessage","Attendance saved.",true);$("attendanceRemarks").value="";});
+  async function loadStudentMarksAndRankings(){const {data:marks,error}=await client.from("performance_marks").select("score,category,feedback,created_at").eq("student_id",currentUser.id).order("created_at",{ascending:false}).limit(200);if(error){$("studentMarks").textContent="Marks could not be loaded: "+error.message;return;}const {data:attendance, error:ae}=await client.from("attendance_records").select("attendance_date,status,remarks").eq("student_id",currentUser.id).order("attendance_date",{ascending:false}).limit(200);if(ae){$("studentPerformanceMessage").textContent="Attendance could not be loaded: "+ae.message;}else{$("studentPerformanceMessage").textContent=(attendance||[]).length+" attendance record(s) • "+(marks||[]).length+" performance mark(s).";}const markRows=(marks||[]).map(m=>[m.created_at?new Date(m.created_at).toLocaleDateString():"",m.category,m.score,m.feedback||""]);$("studentMarks").replaceChildren(makeTable(["Date","Category","Score /100","Feedback"],markRows));const attendanceNode=makeTable(["Attendance date","Status","Remarks"],(attendance||[]).map(a=>[a.attendance_date,a.status,a.remarks||""]));$("studentMarks").append(el("h3","Attendance"));$("studentMarks").append(attendanceNode);if(!currentProfile||!currentProfile.organization_id||!currentProfile.course){$("studentRankings").replaceChildren(el("p","Add your course and organisation to your profile to view course rankings.","muted"));return;}const {data:peers,error:pe}=await client.from("profiles").select("id,full_name,course").eq("organization_id",currentProfile.organization_id).eq("course",currentProfile.course).eq("role","student");if(pe){$("studentRankings").textContent="Course ranking could not be loaded: "+pe.message;return;}const ids=(peers||[]).map(p=>p.id);if(!ids.length)return;$("studentRankings").replaceChildren(el("p","Calculating course rankings…","muted"));const {data:allMarks,error:me}=await client.from("performance_marks").select("student_id,score").in("student_id",ids);if(me){$("studentRankings").textContent="Course ranking could not be loaded: "+me.message;return;}const avg={};for(const m of allMarks||[]){if(!avg[m.student_id])avg[m.student_id]=[];avg[m.student_id].push(Number(m.score));}const rows=(peers||[]).map(p=>({id:p.id,name:p.full_name,count:(avg[p.id]||[]).length,score:(avg[p.id]||[]).length?(avg[p.id].reduce((a,b)=>a+b,0)/avg[p.id].length):null})).sort((a,b)=>(b.score??-1)-(a.score??-1));$("studentRankings").replaceChildren(makeTable(["Rank","Student","Marks","Average /100"],rows.map((r,i)=>[String(i+1),r.name+(r.id===currentUser.id?" (You)":""),String(r.count),r.score===null?"No marks":r.score.toFixed(1)])));}
+  $("revealOrgKey").addEventListener("click",()=>{if(!currentProfile)return;const key=sessionStorage.getItem("elogbook-org-key-"+currentProfile.organization_id);$("orgKeyDisplay").hidden=false;$("copyOrgKey").hidden=!key;$("orgKeyDisplay").textContent=key||"The organisation key is not recoverable from the database. Generate a replacement before inviting members.";});
+  $("copyOrgKey").addEventListener("click",async()=>{const key=sessionStorage.getItem("elogbook-org-key-"+(currentProfile&&currentProfile.organization_id));if(!key)return;try{await navigator.clipboard.writeText(key);$("orgKeyDisplay").textContent="Organisation key copied: "+key;}catch(_){$("orgKeyDisplay").textContent="Copy is unavailable. Select and copy this key: "+key;}});
+  window.addEventListener("online",()=>{$("syncState").textContent="Online";});window.addEventListener("offline",()=>{$("syncState").textContent="Offline";});
+  if(client){fetchOrganizations();showSession();}
 })();
