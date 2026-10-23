@@ -102,3 +102,20 @@ create policy "user reads assignments involving them" on public.supervisor_assig
 -- IMPORTANT: never expose service_role/secret keys in website or APK.
 -- Do not let users self-assign supervisor/admin roles. Configure privileged role
 -- provisioning separately before enabling supervisor review and admin policies.
+
+
+-- Explicit Data API grants for the dedicated E-Logbook project.
+-- RLS remains enabled; grants expose the endpoints, policies restrict which rows each student can access.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table public.profiles to authenticated;
+grant select, insert, update, delete on table public.placements to authenticated;
+grant select, insert, update, delete on table public.daily_entries to authenticated;
+grant select, insert, update, delete on table public.weekly_summaries to authenticated;
+grant select on table public.supervisor_assignments to authenticated;
+
+create index if not exists daily_entries_placement_id_idx on public.daily_entries(placement_id);
+create index if not exists placements_field_supervisor_id_idx on public.placements(field_supervisor_id);
+create index if not exists placements_institution_supervisor_id_idx on public.placements(institution_supervisor_id);
+create index if not exists placements_student_id_idx on public.placements(student_id);
+create index if not exists supervisor_assignments_supervisor_id_idx on public.supervisor_assignments(supervisor_id);
+create index if not exists weekly_summaries_placement_id_idx on public.weekly_summaries(placement_id);
