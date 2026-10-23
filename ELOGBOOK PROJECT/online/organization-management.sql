@@ -124,7 +124,8 @@ begin
  if nullif(trim(p_full_name),'') is null then raise exception 'Enter your full name.'; end if;
  if p_gender not in ('female','male','prefer_not_to_say') then raise exception 'Choose a gender option.'; end if;
  if p_role in ('field_supervisor','institution_supervisor') and nullif(trim(p_course),'') is null then raise exception 'Supervisors must enter their course or subject.'; end if;
- if p_role='student' and (nullif(trim(p_course),'') is null or nullif(trim(p_student_number),'') is null) then raise exception 'Students must enter their course and student/index number.'; end if;
+ if nullif(trim(p_course),'') is null then raise exception 'Enter your course or subject.'; end if;
+ if p_role='student' and nullif(trim(p_student_number),'') is null then raise exception 'Students must enter their student/index number.'; end if;
  select * into v_org from public.organizations where id=p_organization_id and organization_key_hash=encode(extensions.digest(convert_to(coalesce(p_organization_key,''),'UTF8'),'sha256'),'hex');
  if not found then raise exception 'Organisation or key was not accepted. Check both and try again.'; end if;
  select * into v_existing from public.profiles where id=v_user;
@@ -180,7 +181,22 @@ grant execute on function public.register_logbook_member(text,text,text,text,tex
 grant execute on function public.organization_review_supervisor(uuid,boolean) to authenticated;
 grant execute on function public.organization_assign_supervisor(uuid,uuid,text) to authenticated;
 grant execute on function public.rotate_logbook_organization_key() to authenticated;
+revoke all on function public.protect_logbook_profile_fields() from public,anon,authenticated;
+revoke all on function public.current_logbook_role() from public,anon;
+revoke all on function public.current_logbook_organization_id() from public,anon;
+revoke all on function public.current_logbook_approval_status() from public,anon;
+revoke all on function public.current_logbook_course() from public,anon;
+revoke all on function public.create_logbook_organization(text,text,text) from public,anon;
+revoke all on function public.register_logbook_member(text,text,text,text,text,uuid,text) from public,anon;
+revoke all on function public.organization_review_supervisor(uuid,boolean) from public,anon;
+revoke all on function public.organization_assign_supervisor(uuid,uuid,text) from public,anon;
+revoke all on function public.rotate_logbook_organization_key() from public,anon;
+grant execute on function public.current_logbook_role() to authenticated;
+grant execute on function public.current_logbook_organization_id() to authenticated;
+grant execute on function public.current_logbook_approval_status() to authenticated;
+grant execute on function public.current_logbook_course() to authenticated;
 
+drop policy if exists "owners and assigned supervisors read profiles" on public.profiles;
 drop policy if exists "owners supervisors and organization read profiles" on public.profiles;
 drop policy if exists "owners supervisors and organisation read profiles" on public.profiles;
 create policy "owners supervisors and organisation read profiles" on public.profiles for select to authenticated using (
@@ -189,6 +205,7 @@ create policy "owners supervisors and organisation read profiles" on public.prof
  or (public.current_logbook_role()='organization_admin' and public.current_logbook_organization_id()=profiles.organization_id)
  or (public.current_logbook_role()='student' and profiles.role='student' and profiles.organization_id=public.current_logbook_organization_id() and profiles.course=public.current_logbook_course())
 );
+drop policy if exists "students and assigned supervisors read daily entries" on public.daily_entries;
 drop policy if exists "students supervisors and organisation read daily entries" on public.daily_entries;
 create policy "students supervisors and organisation read daily entries" on public.daily_entries for select to authenticated using (
  student_id=(select auth.uid())
@@ -197,6 +214,7 @@ create policy "students supervisors and organisation read daily entries" on publ
  or (public.current_logbook_role()='organization_admin' and public.current_logbook_approval_status()='approved'
    and exists(select 1 from public.profiles student where student.id=daily_entries.student_id and student.organization_id=public.current_logbook_organization_id()))
 );
+drop policy if exists "students and assigned supervisors read weekly summaries" on public.weekly_summaries;
 drop policy if exists "students supervisors and organisation read weekly summaries" on public.weekly_summaries;
 create policy "students supervisors and organisation read weekly summaries" on public.weekly_summaries for select to authenticated using (
  student_id=(select auth.uid())
@@ -220,6 +238,7 @@ using (public.current_logbook_role()='organization_admin' and public.current_log
  and exists(select 1 from public.profiles student where student.id=attendance_records.student_id and student.organization_id=public.current_logbook_organization_id()))
 with check (public.current_logbook_role()='organization_admin' and public.current_logbook_approval_status()='approved' and recorded_by=(select auth.uid())
  and exists(select 1 from public.profiles student where student.id=attendance_records.student_id and student.organization_id=public.current_logbook_organization_id()));
+drop policy if exists "students view own attendance" on public.attendance_records;
 create policy "students view own attendance" on public.attendance_records for select to authenticated using (student_id=(select auth.uid()));
 drop policy if exists "assigned supervisors manage attendance" on public.attendance_records;
 create policy "assigned supervisors manage attendance" on public.attendance_records for all to authenticated
