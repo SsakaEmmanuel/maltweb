@@ -1,73 +1,68 @@
-# Independent E-Logbook
+# E-Logbook setup and operation
 
-This folder contains the E-Logbook web portal and native Android app source. The old paper-style forms are retained in the existing folders.
+E-Logbook is maintained under this repository but has its own web portal and dedicated Supabase project. Daily and weekly records from the original version are preserved.
 
-## Online portal
-After the repository's GitHub Pages deployment finishes, open:
-`https://ssakaemmanuel.github.io/maltweb/ELOGBOOK%20PROJECT/online/index.html`
+## Live portal and source
+- Web portal: https://ssakaemmanuel.github.io/maltweb/ELOGBOOK%20PROJECT/online/index.html
+- Native Android source: `android/`
+- Organisation workflow SQL: `online/organization-management.sql`
+- Base database SQL: `online/schema.sql`
+- Assigned-supervisor review SQL: `online/supervisor-review.sql`
 
-The portal is static HTML/CSS/JavaScript. GitHub Pages does not execute PHP.
+## Current role-based flow
+1. **Organisation administrator:** registers the school / institution and receives an organisation key. Store the key securely; it is only shown when created or rotated.
+2. **Supervisor:** registers with names, gender, course/subject, organisation and organisation key. The account stays pending until that organisation approves it.
+3. **Student:** registers with names, gender, course, student/index number, organisation and its key.
+4. **Organisation administrator:** approves/rejects supervisors, assigns approved supervisors to students, reviews reporting progress, records attendance and awards marks.
+5. **Supervisor:** sees explicitly assigned students, reviews their daily and weekly reporting, records attendance, adds review feedback and awards marks.
+6. **Student:** saves daily and weekly records, sees supervisor feedback, attendance records, marks, and ranking within the same organisation and course.
+
+The website and Android app use the same Supabase Auth accounts and the same online data. The Android app additionally keeps daily records and weekly summaries in a Room database, then queues them for network sync.
 
 ## Dedicated online database
-A separate project named **E-Logbook** is already created in the MALTWEB Supabase organization (Frankfurt region).
+The project already connected to this E-Logbook is:
 - Project ref: `qjzftbgahxkolljpmkmn`
-- Project URL: `https://qjzftbgahxkolljpmkmn.supabase.co`
-- Schema and initial row-level security policies have been applied and verified.
-- Authenticated Data API grants and supporting foreign-key indexes have been applied.
+- URL: `https://qjzftbgahxkolljpmkmn.supabase.co`
 
-The website and Android app use only the public publishable key. Do not add a service-role/secret key to GitHub.
+Only the public publishable key belongs in web or Android client code. Never copy a service-role/secret key to GitHub.
 
-## Authentication settings to review
-In the Supabase dashboard, open **Authentication → URL Configuration** and set the Site URL to the GitHub Pages portal URL above. Add any additional confirmation/reset redirect URLs you intend to use. Under **Authentication → Sign In / Providers → Email**, review whether email confirmation is required. The apps handle the confirmation-required flow by asking the student to check their inbox and sign in after confirming.
+### Fresh project installation
+In a **new, dedicated E-Logbook Supabase project**, run these files in this order in the SQL Editor:
+1. `online/schema.sql`
+2. `online/supervisor-review.sql`
+3. `online/organization-management.sql`
 
-## Native Android
-Open `android/` in Android Studio with JDK 17. The app includes:
-- Student email sign-up and sign-in.
-- AES/GCM encrypted session storage backed by Android Keystore.
-- Room local storage so daily entries can be created offline and survive restarts.
-- WorkManager one-time and periodic network-constrained sync for daily entries.
-- Pending entries remain local until the server accepts their upload.
+Do not run these E-Logbook schema files against the main MALTWEB database. The organisation migration adds tables/columns and protected RPC functions; it does not delete daily or weekly reports.
 
-GitHub Actions builds a debug APK and uploads it as an artifact. Open **Actions → E-Logbook Android build → latest successful run → Artifacts** to download it.
+### Authentication configuration
+In Supabase, open Authentication → URL Configuration and set the Site URL to the live portal URL above. Add the portal URL to any confirmation/reset redirect URL list used by your project. Under Authentication → Sign In / Providers → Email, decide whether email confirmation is required. When confirmation is enabled, a newly created user must confirm email and then sign in to complete the organisation-linked profile.
 
-## How to test end-to-end
-1. Confirm the URL and Email settings above.
-2. Open the portal and create a test student account with an email inbox you can access.
-3. Confirm the email if prompted, sign in, and save a daily work entry.
-4. On the Android app, sign in with the same student account and tap **Sync now**; the daily entry should upload, while entries added offline should stay marked pending until connectivity returns.
-5. Save a fresh daily entry on Android, wait for it to show **SYNCED**, then refresh the online portal and verify it appears.
-6. Test with a disposable account before entering real student data.
+## Important security behaviour
+- Organisation keys are stored as SHA-256 hashes; only the newly generated or rotated key is returned to the organisation administrator.
+- A key is a membership check, not a substitute for account authentication.
+- Public sign-up cannot create an approved supervisor or organisation administrator by changing a client-side role value.
+- Supervisor registration is pending until an organisation administrator approves it.
+- Only an organisation administrator can approve supervisors and assign supervisors to students in the same organisation.
+- Row-level security limits report access to the record owner, assigned approved supervisors, or the student's own organisation administrator.
+- Database triggers prevent students from writing supervisor review/signature fields and prevent users from directly editing their role, organisation or approval status.
+- Performance marks are append-only from the client; scores must be between 0 and 100 and identify the awarding account.
+- Do not store a service-role/secret key in the website, repository or APK.
 
-## Scope still to complete
-The initial native sync worker currently handles daily entries. Weekly summaries, placements, supervisor approvals/reviews, signatures, PDF exports, and conflict-resolution UI remain follow-up work. Public sign-up is fixed to the student role; supervisor/admin roles require trusted provisioning before their policies and screens are enabled. This is a debug build, not a signed production release.
+## Build and test
+GitHub Actions builds a debug APK whenever Android source files change:
+https://github.com/SsakaEmmanuel/maltweb/actions/workflows/elogbook-android-build.yml
 
-## Weekly reports and supervisor review
+Test with disposable accounts before using real placement data:
+1. Register an organisation and copy its key.
+2. Register a supervisor and a student using the organisation selector and key.
+3. Sign into the organisation account and approve the supervisor.
+4. Assign the approved supervisor to the student.
+5. Save student daily and weekly reports; review them as the supervisor.
+6. Record attendance and marks, then inspect student and organisation tables.
+7. Test Android offline daily/weekly saving, then reconnect and use Sync now.
 
-Weekly summaries are available from the web portal and the Android app. The Android app saves weekly summaries locally first and queues online synchronization; supervisor review comments and reviewed status are refreshed during sync.
-
-The assigned-supervisor review permissions are enabled in the dedicated project and documented in `online/supervisor-review.sql`. The review queue shows only weekly reports belonging to students explicitly assigned to the signed-in supervisor. The database blocks student accounts from modifying supervisor comments/signatures and clears an existing review if a student edits the reviewed report's content.
-
-### Trusted supervisor setup (one time per supervisor)
-
-1. Let the supervisor create and confirm a normal account through the E-Logbook sign-up page.
-2. In the Supabase dashboard for the **E-Logbook** project, open the SQL Editor. A trusted database administrator must change the supervisor's profile role and create the assignment; public users cannot grant themselves supervisor roles.
-3. Use a statement pattern like the following, replacing the email addresses with the real accounts:
-
-```sql
--- Promote only an account you have verified belongs to this supervisor.
-update public.profiles
-set role = 'field_supervisor'
-where id = (select id from auth.users where email = 'field.supervisor@example.com');
-
--- Link that supervisor to one specific student.
-insert into public.supervisor_assignments (student_id, supervisor_id, assignment_type)
-select student_profile.id, supervisor_profile.id, 'field_supervisor'
-from public.profiles student_profile
-cross join public.profiles supervisor_profile
-where student_profile.id = (select id from auth.users where email = 'student@example.com')
-  and supervisor_profile.id = (select id from auth.users where email = 'field.supervisor@example.com');
-```
-
-For an institution supervisor, use role and assignment type `institution_supervisor`. Create one assignment row per student/supervisor relationship. Do not grant the role from public sign-up, and do not place service-role keys in the app or website.
-
-Once a supervisor role and assignment exist, the web portal and updated Android app display the **Supervisor reviews** queue. Review updates save comments and the review timestamp; the student's app picks them up on its next successful sync. The actual review/sign-off flow still needs a real assigned supervisor account to be tested end-to-end.
+## Current implementation notes
+- Web reports use responsive row/column tables.
+- Android daily and weekly entries are saved locally; WorkManager uploads pending entries when online.
+- Organisation reports, student/supervisor registration, supervisor approval, student assignments, attendance and mark-awarding are implemented in the current source.
+- The native app build must pass and a real device/account round-trip must be tested before treating the complete workflow as production-ready. PDF export, conflict resolution, attendance correction audit history, and a signed production APK still need further hardening.
