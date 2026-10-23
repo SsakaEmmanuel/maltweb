@@ -1,6 +1,6 @@
-// Configure with the URL and publishable/anon key from the dedicated E-Logbook project.
-// These values are intended for public clients. NEVER paste a service_role/secret key here.
+// Public client configuration for the dedicated E-Logbook Supabase project.
+// Publishable/anon keys are designed for browser use; never put a service-role key here.
 window.ELOGBOOK_CONFIG = {
-  supabaseUrl: "PASTE_YOUR_DEDICATED_SUPABASE_PROJECT_URL",
-  supabaseAnonKey: "PASTE_YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY"
+  supabaseUrl: "https://qjzftbgahxkolljpmkmn.supabase.co",
+  supabaseAnonKey: "sb_publishable_zde4nfdYQEcEUo99TZnZjA_OuPEB7tJ"
 };
