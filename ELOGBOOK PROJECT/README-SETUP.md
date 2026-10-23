@@ -2,7 +2,15 @@
 
 This system is separate from the MALTWEB listings database. Existing paper-style forms are preserved while this first online portal is added alongside them.
 
-## 1. Create the separate database first
+## Online portal address
+
+After GitHub Pages publishes the repository, the portal should be available at: `https://ssakaemmanuel.github.io/maltweb/ELOGBOOK%20PROJECT/online/`.
+
+## 1. Database already created
+
+A dedicated project named **E-Logbook** has been created in the MALTWEB Supabase organization in the Frankfurt region. The initial five-table schema and row-level security policies have been applied and checked. The website config uses the public publishable key; no service-role key is exposed.
+
+## 2. Database setup reference
 1. Create a **new Supabase project specifically for E-Logbook**. Do not use the MALTWEB project.
 2. In that new project's SQL Editor, run the complete file `online/schema.sql`.
 3. Copy the project's Project URL and publishable key (or legacy anon key) into `online/config.js`.
