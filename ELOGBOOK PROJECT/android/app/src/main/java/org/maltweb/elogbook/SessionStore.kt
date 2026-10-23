@@ -15,7 +15,8 @@ internal data class AuthSession(
     val userId: String,
     val accessToken: String,
     val refreshToken: String,
-    val expiresAt: Long
+    val expiresAt: Long,
+    val email: String = ""
 )
 
 internal class SessionStore(context: Context) {
@@ -28,12 +29,12 @@ internal class SessionStore(context: Context) {
             .put("accessToken", session.accessToken)
             .put("refreshToken", session.refreshToken)
             .put("expiresAt", session.expiresAt)
+            .put("email", session.email)
             .toString().toByteArray(Charsets.UTF_8)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, getKey())
         val encrypted = cipher.doFinal(plain)
-        val packed = cipher.iv + encrypted
-        prefs.edit().putString("session", Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
+        prefs.edit().putString("session", Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)).apply()
     }
 
     fun read(): AuthSession? {
@@ -41,16 +42,15 @@ internal class SessionStore(context: Context) {
             val encoded = prefs.getString("session", null) ?: return null
             val packed = Base64.decode(encoded, Base64.NO_WRAP)
             if (packed.size <= 12) return null
-            val iv = packed.copyOfRange(0, 12)
-            val encrypted = packed.copyOfRange(12, packed.size)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(128, iv))
-            val json = JSONObject(String(cipher.doFinal(encrypted), Charsets.UTF_8))
+            cipher.init(Cipher.DECRYPT_MODE, getKey(), GCMParameterSpec(128, packed.copyOfRange(0, 12)))
+            val json = JSONObject(String(cipher.doFinal(packed.copyOfRange(12, packed.size)), Charsets.UTF_8))
             AuthSession(
                 userId = json.getString("userId"),
                 accessToken = json.getString("accessToken"),
                 refreshToken = json.getString("refreshToken"),
-                expiresAt = json.optLong("expiresAt", 0L)
+                expiresAt = json.optLong("expiresAt", 0L),
+                email = json.optString("email", "")
             )
         } catch (_: Exception) {
             null
@@ -65,10 +65,7 @@ internal class SessionStore(context: Context) {
         if (existing != null) return existing
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         generator.init(
-            KeyGenParameterSpec.Builder(
-                alias,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-            )
+            KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
