@@ -233,7 +233,7 @@ internal class SupabaseApi(private val context: Context) {
         }
         if (ids.isEmpty()) return JSONArray()
         return request(
-            "GET", "/rest/v1/profiles?select=id,full_name,course,student_number& id=in.(" + ids.joinToString(",") + ")".replace("& id","&id"),
+            "GET", "/rest/v1/profiles?select=id,full_name,course,student_number&id=in.(" + ids.joinToString(",") + ")",
             token = session.accessToken
         ) as? JSONArray ?: throw IOException("Unexpected assigned students response.")
     }
