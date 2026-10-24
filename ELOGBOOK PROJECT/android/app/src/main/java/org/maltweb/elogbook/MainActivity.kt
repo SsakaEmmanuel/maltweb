@@ -145,6 +145,7 @@ class MainActivity : ComponentActivity() {
                     currentProfile = roleResult.second
                     sessionStore.save(roleResult.first)
                     currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
+                    currentProfile?.let { profile -> getSharedPreferences("elogbook_offline_profile", MODE_PRIVATE).edit().putString(roleResult.first.userId, profile.toString()).apply() }
                     if (currentSession?.userId == restoredSession.userId) {
                         if (currentRole == "unregistered") {
                             showAuth()
@@ -158,7 +159,11 @@ class MainActivity : ComponentActivity() {
                         } else showHome()
                     }
                 } catch (_: Exception) {
-                    // Keep existing local records available when opening without a connection.
+                    val cached = getSharedPreferences("elogbook_offline_profile", MODE_PRIVATE).getString(restoredSession.userId, null)
+                    currentProfile = try { cached?.let { JSONObject(it) } } catch (_: Exception) { null }
+                    currentRole = currentProfile?.optString("role")?.ifBlank { "student" } ?: "student"
+                    // Keep the previously authenticated session and local records available offline.
+                    showHome()
                 }
             }
         }
@@ -1114,6 +1119,12 @@ class MainActivity : ComponentActivity() {
                 reportActions.addView(actionButton("View Weekly Reports", navy).apply {
                     setOnClickListener { openStudentReport(true) }
                 }, matchWrap())
+                reportActions.addView(actionButton("Download / Print Daily PDF", blue).apply {
+                    setOnClickListener { printReportPdf("Student Daily Activities", daily, studentNames, false) }
+                }, matchWrap())
+                reportActions.addView(actionButton("Download / Print Weekly PDF", navy).apply {
+                    setOnClickListener { printReportPdf("Student Weekly Summaries", weekly, studentNames, true) }
+                }, matchWrap())
                 screenHost.addView(reportActions, matchWrap())
 
                 val dailyRows = ArrayList<List<String>>()
@@ -1185,6 +1196,38 @@ class MainActivity : ComponentActivity() {
         val attendance: JSONArray,
         val marks: JSONArray
     )
+
+    private fun printReportPdf(title: String, reports: JSONArray, studentNames: Map<String, String>, weekly: Boolean) {
+        if (reports.length() == 0) {
+            Toast.makeText(this, "There are no reports to print yet.", Toast.LENGTH_LONG).show()
+            return
+        }
+        fun esc(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+        val headers = if (weekly) listOf("Student", "Week starting", "Summary", "Skills learned", "Challenges", "Supervisor feedback", "Review status")
+            else listOf("Student", "Date", "Work done", "Tools / equipment", "Skills learned", "Challenges", "Recommendations", "Supervisor feedback", "Review status")
+        val doc = StringBuilder("<!doctype html><html><head><meta charset='utf-8'><style>body{font:10px Arial;color:#17253a;padding:16px}h1{font-size:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #9aa8bb;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eaf0f8}tr{break-inside:avoid}@page{size:A4 landscape;margin:10mm}</style></head><body><h1>E-Logbook — ${esc(title)}</h1><table><thead><tr>")
+        headers.forEach { doc.append("<th>").append(esc(it)).append("</th>") }
+        doc.append("</tr></thead><tbody>")
+        for (i in 0 until reports.length()) {
+            val row = reports.optJSONObject(i) ?: continue
+            val name = studentNames[row.optString("student_id")].orEmpty().ifBlank { "Student" }
+            val values = if (weekly) listOf(name,row.optString("week_start"),row.optString("summary"),row.optString("skills_learned").ifBlank { "—" },row.optString("challenges").ifBlank { "—" },row.optString("supervisor_comments").ifBlank { "—" },if (row.isNull("supervisor_signed_at")) "Awaiting review" else "Reviewed")
+            else listOf(name,row.optString("entry_date"),row.optString("work_done"),row.optString("tools_used").ifBlank { "—" },row.optString("skills_learned").ifBlank { "—" },row.optString("challenges").ifBlank { "—" },row.optString("recommendations").ifBlank { "—" },row.optString("supervisor_comments").ifBlank { "—" },if (row.isNull("supervisor_signed_at")) "Awaiting review" else "Reviewed")
+            doc.append("<tr>"); values.forEach { doc.append("<td>").append(esc(it)).append("</td>") }; doc.append("</tr>")
+        }
+        doc.append("</tbody></table></body></html>")
+        val printView = android.webkit.WebView(this)
+        printView.webViewClient = object : android.webkit.WebViewClient() {
+            override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+                val manager = getSystemService(android.content.Context.PRINT_SERVICE) as android.print.PrintManager
+                manager.print(title, view.createPrintDocumentAdapter(title), android.print.PrintAttributes.Builder()
+                    .setMediaSize(android.print.PrintAttributes.MediaSize.ISO_A4)
+                    .setColorMode(android.print.PrintAttributes.COLOR_MODE_COLOR).build())
+            }
+        }
+        printView.loadDataWithBaseURL(null, doc.toString(), "text/html", "UTF-8", null)
+        Toast.makeText(this, "Choose Save as PDF in the print screen.", Toast.LENGTH_LONG).show()
+    }
 
     private fun reviewSupervisor(profileId: String, approve: Boolean) {
         val session = currentSession ?: return
@@ -1311,6 +1354,7 @@ class MainActivity : ComponentActivity() {
                 }
                 currentProfile = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchProfile(session) }
                 currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
+                currentProfile?.let { profile -> getSharedPreferences("elogbook_offline_profile", MODE_PRIVATE).edit().putString(session.userId, profile.toString()).apply() }
                 val needsOrganization = currentRole == "student" &&
                     currentProfile?.optString("organization_id").isNullOrBlank()
                 if (currentRole == "unregistered" || needsOrganization) {
