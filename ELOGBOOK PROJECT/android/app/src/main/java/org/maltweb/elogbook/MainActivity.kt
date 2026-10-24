@@ -61,6 +61,8 @@ class MainActivity : ComponentActivity() {
     private var weeklyJob: Job? = null
     private lateinit var weeklyList: LinearLayout
     private var activeScreen = "home"
+    private var keyboardVisible = false
+    private var scrollYBeforeKeyboard: Int? = null
 
     private val navy = Color.rgb(18, 35, 61)
     private val blue = Color.rgb(39, 91, 166)
@@ -129,15 +131,29 @@ class MainActivity : ComponentActivity() {
         frame.addView(navigationOverlay, FrameLayout.LayoutParams(-1, -1))
         setContentView(frame)
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        var lastVisibleFrameBottom = 0
         frame.viewTreeObserver.addOnGlobalLayoutListener {
             val visibleFrame = android.graphics.Rect()
             window.decorView.getWindowVisibleDisplayFrame(visibleFrame)
-            if (lastVisibleFrameBottom != 0 &&
-                kotlin.math.abs(visibleFrame.bottom - lastVisibleFrameBottom) > dp(2)) {
-                scrollFocusedInputAboveKeyboard()
+            // Use the full display height. The decor height itself shrinks on some Android builds.
+            val keyboardHeight = resources.displayMetrics.heightPixels - visibleFrame.bottom
+            val imeVisible = keyboardHeight > dp(150)
+            if (imeVisible) {
+                if (!keyboardVisible) {
+                    keyboardVisible = true
+                    if (scrollYBeforeKeyboard == null) scrollYBeforeKeyboard = scrollContainer.scrollY
+                }
+                val focused = window.decorView.findFocus() as? EditText
+                if (focused != null) scrollContainer.post { scrollFocusedInputAboveKeyboard(focused) }
+            } else if (keyboardVisible) {
+                keyboardVisible = false
+                val restoreY = scrollYBeforeKeyboard
+                scrollYBeforeKeyboard = null
+                if (restoreY != null) {
+                    scrollContainer.postDelayed({
+                        if (!keyboardVisible) scrollContainer.smoothScrollTo(0, restoreY)
+                    }, 160L)
+                }
             }
-            lastVisibleFrameBottom = visibleFrame.bottom
         }
 
         if (currentSession == null) {
@@ -1698,34 +1714,40 @@ class MainActivity : ComponentActivity() {
         window.decorView.getWindowVisibleDisplayFrame(visibleFrame)
         val location = IntArray(2)
         field.getLocationOnScreen(location)
+        val fieldTop = location[1]
+        val fieldBottom = fieldTop + field.height
+        val safeTop = visibleFrame.top + dp(12)
+        val safeBottom = visibleFrame.bottom - dp(18)
+        val usableHeight = (safeBottom - safeTop).coerceAtLeast(dp(120))
 
-        // Keep the current text line visible rather than trying to fit a large multi-line box.
-        val textLayout = field.layout
-        val selection = field.selectionStart.coerceAtLeast(0)
-        val caretBounds = android.graphics.Rect()
-        val caretTop: Int
-        val caretBottom: Int
-        if (textLayout != null && textLayout.lineCount > 0) {
-            val line = textLayout.getLineForOffset(selection.coerceAtMost(textLayout.text.length))
-            textLayout.getLineBounds(line, caretBounds)
-            caretTop = location[1] + caretBounds.top
-            caretBottom = location[1] + caretBounds.bottom
-        } else {
-            caretTop = location[1]
-            caretBottom = location[1] + field.height
-        }
-
-        val bottomOverflow = caretBottom + dp(18) - visibleFrame.bottom
-        if (bottomOverflow > 0) {
-            scrollContainer.post {
-                if (field.hasFocus()) scrollContainer.smoothScrollBy(0, bottomOverflow)
+        // Prefer keeping the whole input above the keyboard. Very tall notes fields fall back to the caret.
+        val targetTop: Int
+        val targetBottom: Int
+        if (field.height > usableHeight - dp(16)) {
+            val layout = field.layout
+            if (layout != null && layout.lineCount > 0) {
+                val selection = field.selectionStart.coerceAtLeast(0).coerceAtMost(layout.text.length)
+                val bounds = android.graphics.Rect()
+                layout.getLineBounds(layout.getLineForOffset(selection), bounds)
+                targetTop = fieldTop + bounds.top
+                targetBottom = fieldTop + bounds.bottom
+            } else {
+                targetTop = fieldTop
+                targetBottom = fieldBottom
             }
         } else {
-            val topOverflow = visibleFrame.top + dp(12) - caretTop
-            if (topOverflow > 0) {
-                scrollContainer.post {
-                    if (field.hasFocus()) scrollContainer.smoothScrollBy(0, -topOverflow)
-                }
+            targetTop = fieldTop
+            targetBottom = fieldBottom
+        }
+
+        val shift = when {
+            targetBottom + dp(14) > safeBottom -> targetBottom + dp(14) - safeBottom
+            targetTop < safeTop -> targetTop - safeTop
+            else -> 0
+        }
+        if (shift != 0) {
+            scrollContainer.post {
+                if (field.hasFocus()) scrollContainer.scrollBy(0, shift)
             }
         }
     }
@@ -1747,12 +1769,48 @@ class MainActivity : ComponentActivity() {
             }
             field.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus && ::scrollContainer.isInitialized) {
+                    if (!keyboardVisible && scrollYBeforeKeyboard == null) {
+                        scrollYBeforeKeyboard = scrollContainer.scrollY
+                    }
                     field.post { scrollFocusedInputAboveKeyboard(field) }
-                    field.postDelayed({ if (field.hasFocus()) scrollFocusedInputAboveKeyboard(field) }, 180L)
-                    field.postDelayed({ if (field.hasFocus()) scrollFocusedInputAboveKeyboard(field) }, 380L)
+                    field.postDelayed({ if (field.hasFocus()) scrollFocusedInputAboveKeyboard(field) }, 240L)
+                    field.postDelayed({ if (field.hasFocus()) scrollFocusedInputAboveKeyboard(field) }, 520L)
                 }
             }
-            parent.addView(field, matchWrap())
+            if (fieldLabel.equals("Password", ignoreCase = true)) {
+                val passwordType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                val visibleType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                field.inputType = passwordType
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                }
+                row.addView(field, LinearLayout.LayoutParams(0, -2, 1f))
+                var showingPassword = false
+                val eye = TextView(this).apply {
+                    text = "👁"
+                    textSize = 20f
+                    gravity = android.view.Gravity.CENTER
+                    setTextColor(blue)
+                    contentDescription = "Show password"
+                    isClickable = true
+                    isFocusable = false
+                    setPadding(dp(10), dp(8), dp(10), dp(8))
+                    setOnClickListener {
+                        showingPassword = !showingPassword
+                        field.inputType = if (showingPassword) visibleType else passwordType
+                        field.setSelection(field.text?.length ?: 0)
+                        contentDescription = if (showingPassword) "Hide password" else "Show password"
+                        text = if (showingPassword) "◉" else "👁"
+                    }
+                }
+                row.addView(eye, LinearLayout.LayoutParams(dp(48), -2))
+                parent.addView(row, matchWrap())
+            } else {
+                parent.addView(field, matchWrap())
+            }
         }
     }
 
