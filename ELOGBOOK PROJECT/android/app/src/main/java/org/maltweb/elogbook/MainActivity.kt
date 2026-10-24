@@ -142,16 +142,29 @@ class MainActivity : ComponentActivity() {
                     keyboardVisible = true
                     if (scrollYBeforeKeyboard == null) scrollYBeforeKeyboard = scrollContainer.scrollY
                 }
+                // Add temporary scroll room equal to the keyboard height. Without this, a short
+                // login form cannot scroll far enough to lift its password field above the IME.
+                val extraBottom = (keyboardHeight + dp(36)).coerceAtMost(resources.displayMetrics.heightPixels)
+                if (scrollContainer.paddingBottom != extraBottom) {
+                    scrollContainer.setPadding(
+                        scrollContainer.paddingLeft, scrollContainer.paddingTop,
+                        scrollContainer.paddingRight, extraBottom
+                    )
+                }
                 val focused = window.decorView.findFocus() as? EditText
                 if (focused != null) scrollContainer.post { scrollFocusedInputAboveKeyboard(focused) }
             } else if (keyboardVisible) {
                 keyboardVisible = false
+                scrollContainer.setPadding(
+                    scrollContainer.paddingLeft, scrollContainer.paddingTop,
+                    scrollContainer.paddingRight, dp(28)
+                )
                 val restoreY = scrollYBeforeKeyboard
                 scrollYBeforeKeyboard = null
                 if (restoreY != null) {
                     scrollContainer.postDelayed({
                         if (!keyboardVisible) scrollContainer.smoothScrollTo(0, restoreY)
-                    }, 160L)
+                    }, 180L)
                 }
             }
         }
