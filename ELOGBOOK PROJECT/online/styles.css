@@ -69,3 +69,5 @@ input,textarea,select{scroll-margin-top:92px;scroll-margin-bottom:34vh}
 .report-results{margin-top:16px;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
 #organizationDailyReports table,#organizationWeeklyReports table{min-width:1000px}
 #organizationReportsMessage{margin-top:10px}
+
+#organizationDailyReports table,#organizationWeeklyReports table{min-width:1250px}
