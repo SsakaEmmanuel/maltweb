@@ -125,7 +125,18 @@
     <section class="panel"><h2>Registered supervisors</h2><p class="muted">Approve or reject supervisor registration requests for your organisation.</p><div id="organizationSupervisors" class="table-host"></div></section>
     <section class="panel"><h2>Registered students</h2><p class="muted">View student courses, index numbers, activity records and reporting progress.</p><div id="organizationStudents" class="table-host"></div></section>
     <section class="panel"><h2>Assign a supervisor</h2><div class="two"><label>Student<select id="assignStudent"></select></label><label>Approved supervisor<select id="assignSupervisor"></select></label></div><label>Supervisor type<select id="assignType"><option value="field_supervisor">Field supervisor</option><option value="institution_supervisor">Institution supervisor</option></select></label><button id="saveAssignment" type="button">Assign supervisor</button><p id="assignmentMessage" class="message" role="status"></p></section>
-    <section class="panel"><h2>Organisation attendance</h2><div id="organizationAttendance" class="table-host"></div></section>
+    <section class="panel" id="organizationReportsPanel">
+      <h2>Student reports and activities</h2>
+      <p class="muted">Open submitted daily activities or weekly summaries for students registered in your organisation.</p>
+      <div class="two report-shortcuts">
+        <button type="button" id="viewOrganizationDailyReports">View Daily Reports</button>
+        <button type="button" class="secondary" id="viewOrganizationWeeklyReports">View Weekly Reports</button>
+      </div>
+      <p id="organizationReportsMessage" class="message" role="status"></p>
+      <div id="organizationDailyReports" class="table-host report-results" hidden></div>
+      <div id="organizationWeeklyReports" class="table-host report-results" hidden></div>
+    </section>
+        <section class="panel"><h2>Organisation attendance</h2><div id="organizationAttendance" class="table-host"></div></section>
     <section class="panel"><h2>Organisation performance and rankings</h2><div id="organizationPerformance" class="table-host"></div></section>
     <section class="panel"><h2>Award student marks</h2><div class="two"><label>Student<select id="orgMarkStudent"></select></label><label>Score (0–100)<input id="orgMarkScore" type="number" min="0" max="100" step="0.5"></label></div><label>Category<input id="orgMarkCategory" value="General performance"></label><label>Feedback<textarea id="orgMarkFeedback" rows="2"></textarea></label><button id="saveOrgMark" type="button">Award marks</button><p id="orgMarkMessage" class="message" role="status"></p></section>
   </section>

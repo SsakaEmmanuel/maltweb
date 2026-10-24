@@ -62,3 +62,10 @@ input,textarea,select{scroll-margin-top:92px;scroll-margin-bottom:34vh}
   #entries .record-table-actions{align-items:stretch;flex-direction:column}
   #entries .record-table-actions button{width:100%;min-width:0;flex-basis:auto}
 }
+
+/* Organisation report shortcuts and wide report tables on small screens. */
+.report-shortcuts{align-items:stretch;gap:12px}
+.report-shortcuts button{min-height:48px}
+.report-results{margin-top:16px;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+#organizationDailyReports table,#organizationWeeklyReports table{min-width:1000px}
+#organizationReportsMessage{margin-top:10px}
