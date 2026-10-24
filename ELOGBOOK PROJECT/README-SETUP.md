@@ -65,4 +65,6 @@ Test with disposable accounts before using real placement data:
 - Web reports use responsive row/column tables.
 - Android daily and weekly entries are saved locally; WorkManager uploads pending entries when online.
 - Organisation reports, student/supervisor registration, supervisor approval, student assignments, attendance and mark-awarding are implemented in the current source.
-- The native app build must pass and a real device/account round-trip must be tested before treating the complete workflow as production-ready. PDF export, conflict resolution, attendance correction audit history, and a signed production APK still need further hardening.
+- The native app build must pass and a real device/account round-trip must be tested before treating the complete workflow as production-ready.
+- Daily and weekly PDF print/save controls are implemented for student, supervisor and organisation workspaces on the website and Android app. Verify the print/save flow on target browsers and devices before relying on it for official reports.
+- CSV export, conflict resolution, attendance correction and mark-adjustment audit history, and a signed production APK remain future hardening work.
