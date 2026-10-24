@@ -71,3 +71,5 @@ input,textarea,select{scroll-margin-top:92px;scroll-margin-bottom:34vh}
 #organizationReportsMessage{margin-top:10px}
 
 #organizationDailyReports table,#organizationWeeklyReports table{min-width:1250px}
+
+.report-export-actions{margin-top:8px}

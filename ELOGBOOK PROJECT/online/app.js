@@ -39,6 +39,19 @@
   const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
   const addCell=(row,value,header)=>{const cell=document.createElement(header?"th":"td");cell.textContent=value==null?"":String(value);row.append(cell);return cell;};
   function makeTable(headers,rows){const wrap=el("div",undefined,"table-wrap");if(!rows.length){wrap.append(el("p","No records to display yet.","muted"));return wrap;}const table=el("table");const thead=el("thead");const hr=el("tr");headers.forEach(h=>addCell(hr,h,true));thead.append(hr);table.append(thead);const tbody=el("tbody");rows.forEach(values=>{const tr=el("tr");values.forEach(v=>{const td=el("td");if(v instanceof Node)td.append(v);else td.textContent=v==null?"":String(v);tr.append(td);});tbody.append(tr);});table.append(tbody);wrap.append(table);return wrap;}
+  function printReportAsPdf(title,tableHostId){
+    const host=$(tableHostId),table=host?.querySelector("table");
+    if(!host||host.hidden||!table){say("organizationReportsMessage","Open the relevant report table first, then choose Download / Print PDF.");return;}
+    const popup=window.open("","_blank");
+    if(!popup){say("organizationReportsMessage","Allow pop-ups for E-Logbook to create the printable PDF.");return;}
+    popup.document.open();
+    popup.document.write("<!doctype html><html><head><meta charset='utf-8'><title>"+escapeHtml(title)+"</title><style>body{font:12px Arial,sans-serif;color:#17253a;padding:22px}h1{font-size:20px}p{color:#526174}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #bcc6d4;padding:6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{background:#eaf0f8}tr{break-inside:avoid}@page{size:A4 landscape;margin:12mm}</style></head><body><h1>E-Logbook — "+escapeHtml(title)+"</h1><p>Generated: "+escapeHtml(new Date().toLocaleString())+"</p>"+table.outerHTML+"</body></html>");
+    popup.document.close();
+    popup.onload=()=>setTimeout(()=>popup.print(),300);
+  }
+  $("downloadOrganizationDailyPdf").addEventListener("click",()=>printReportAsPdf("Student Daily Activities","organizationDailyReports"));
+  $("downloadOrganizationWeeklyPdf").addEventListener("click",()=>printReportAsPdf("Student Weekly Summaries","organizationWeeklyReports"));
+
   async function fetchOrganizations(selected){if(!client)return;const {data,error}=await client.from("organizations").select("id,name").order("name");const select=$("regOrganizationId");select.replaceChildren();select.append(new Option("Choose organisation",""));if(error){select.append(new Option("Could not load organisations",""));return;}for(const org of data||[])select.append(new Option(org.name,org.id));if(selected)select.value=selected;}
   let passwordRecoveryMode=false;
   function showLogin(message="",email=""){
