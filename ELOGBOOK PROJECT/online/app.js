@@ -37,6 +37,87 @@
   else{$("connection").textContent="Setup required";say("authMessage","The portal needs its dedicated E-Logbook database configuration.");$("signIn").disabled=$("showCreate").disabled=true;}
   const roleName=role=>({"student":"Student","field_supervisor":"Field supervisor","institution_supervisor":"Institution supervisor","organization_admin":"Organisation administrator","admin":"Administrator"}[role]||"Member");
   const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
+  const eyeSvg=hidden=>hidden
+    ? "<svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 5.2A11.5 11.5 0 0 1 12 5c5.1 0 8.6 4.8 9.5 7-.4 1-1.3 2.2-2.6 3.3M6.2 6.2C3.8 7.7 2.7 10.2 2.5 12c.9 2.2 4.2 7 9.5 7 1 0 1.9-.2 2.7-.5' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>"
+    : "<svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7Z' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linejoin='round'/><circle cx='12' cy='12' r='3' fill='none' stroke='currentColor' stroke-width='1.8'/></svg>";
+  function installPasswordToggles(){
+    document.querySelectorAll('input[type="password"]').forEach(input=>{
+      if(input.dataset.passwordToggleInstalled==="true")return;
+      const wrap=document.createElement("div");wrap.className="password-input-wrap";
+      input.parentNode.insertBefore(wrap,input);wrap.append(input);
+      const toggle=document.createElement("button");
+      toggle.type="button";toggle.className="password-toggle";toggle.innerHTML=eyeSvg(false);
+      toggle.setAttribute("aria-label","Show password");toggle.setAttribute("aria-pressed","false");
+      toggle.addEventListener("pointerdown",event=>event.preventDefault());
+      toggle.addEventListener("click",()=>{
+        const show=input.type==="password";
+        input.type=show?"text":"password";
+        toggle.setAttribute("aria-label",show?"Hide password":"Show password");
+        toggle.setAttribute("aria-pressed",String(show));toggle.innerHTML=eyeSvg(show);
+        try{input.focus({preventScroll:true});}catch(_){input.focus();}
+      });
+      wrap.append(toggle);input.dataset.passwordToggleInstalled="true";
+    });
+  }
+  let focusedEditable=null,scrollBeforeKeyboard=null,viewportKeyboardOpen=false;
+  let lastViewportHeight=window.visualViewport?.height||window.innerHeight,focusRestoreTimer=null;
+  const isEditableField=node=>node instanceof HTMLElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName)&&node.type!=="hidden"&&!node.disabled;
+  function keepFocusedFieldVisible(){
+    const field=focusedEditable&&focusedEditable.isConnected?focusedEditable:document.activeElement;
+    if(!isEditableField(field))return;
+    const viewport=window.visualViewport;
+    const visibleTop=(viewport?.offsetTop||0)+92;
+    const visibleBottom=(viewport?(viewport.offsetTop+viewport.height):window.innerHeight)-18;
+    const rect=field.getBoundingClientRect();
+    let delta=0;
+    if(rect.bottom>visibleBottom)delta=rect.bottom-visibleBottom+12;
+    else if(rect.top<visibleTop)delta=rect.top-visibleTop;
+    if(Math.abs(delta)>2)window.scrollBy({top:delta,behavior:"smooth"});
+  }
+  function restoreFieldScroll(){
+    if(scrollBeforeKeyboard===null)return;
+    const y=scrollBeforeKeyboard;scrollBeforeKeyboard=null;viewportKeyboardOpen=false;
+    window.setTimeout(()=>window.scrollTo({top:y,behavior:"smooth"}),80);
+  }
+  function handleMobileViewportResize(){
+    const height=window.visualViewport?.height||window.innerHeight;
+    const change=lastViewportHeight-height;
+    if(change>100){
+      if(scrollBeforeKeyboard===null)scrollBeforeKeyboard=window.scrollY;
+      viewportKeyboardOpen=true;
+      keepFocusedFieldVisible();
+    }else if(change < -100){
+      viewportKeyboardOpen=false;
+      const y=scrollBeforeKeyboard;
+      if(y!==null){
+        window.setTimeout(()=>{window.scrollTo({top:y,behavior:"smooth"});scrollBeforeKeyboard=null;},170);
+      }
+    }else if(viewportKeyboardOpen){
+      keepFocusedFieldVisible();
+    }
+    lastViewportHeight=height;
+  }
+  document.addEventListener("focusin",event=>{
+    if(!isEditableField(event.target))return;
+    if(scrollBeforeKeyboard===null)scrollBeforeKeyboard=window.scrollY;
+    focusedEditable=event.target;clearTimeout(focusRestoreTimer);
+    [80,220,420,650].forEach(delay=>window.setTimeout(()=>{
+      if(focusedEditable===event.target&&event.target.isConnected)keepFocusedFieldVisible();
+    },delay));
+  });
+  document.addEventListener("focusout",event=>{
+    if(!isEditableField(event.target))return;
+    focusRestoreTimer=window.setTimeout(()=>{
+      if(isEditableField(document.activeElement)){focusedEditable=document.activeElement;return;}
+      const next=document.activeElement;
+      if(next?.closest?.(".password-input-wrap"))return;
+      focusedEditable=null;
+      if(!viewportKeyboardOpen)restoreFieldScroll();
+    },220);
+  });
+  window.visualViewport?.addEventListener("resize",handleMobileViewportResize);
+  window.addEventListener("resize",handleMobileViewportResize);
+  installPasswordToggles();
   const addCell=(row,value,header)=>{const cell=document.createElement(header?"th":"td");cell.textContent=value==null?"":String(value);row.append(cell);return cell;};
   function makeTable(headers,rows){const wrap=el("div",undefined,"table-wrap");if(!rows.length){wrap.append(el("p","No records to display yet.","muted"));return wrap;}const table=el("table");const thead=el("thead");const hr=el("tr");headers.forEach(h=>addCell(hr,h,true));thead.append(hr);table.append(thead);const tbody=el("tbody");rows.forEach(values=>{const tr=el("tr");values.forEach(v=>{const td=el("td");if(v instanceof Node)td.append(v);else td.textContent=v==null?"":String(v);tr.append(td);});tbody.append(tr);});table.append(tbody);wrap.append(table);return wrap;}
   function printReportAsPdf(title,tableHostId,messageId="organizationReportsMessage"){
