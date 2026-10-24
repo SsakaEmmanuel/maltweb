@@ -150,6 +150,9 @@ class MainActivity : ComponentActivity() {
                             showAuth()
                             registrationFields.visibility = View.VISIBLE
                             registrationAction.text = "Complete registration"
+                            signInButton.visibility = View.GONE
+                            forgotPasswordButton.visibility = View.GONE
+                            switchToLoginButton.visibility = View.VISIBLE
                             authMessage.text = "Choose your account type and complete your organisation details."
                             loadOrganizations()
                         } else showHome()

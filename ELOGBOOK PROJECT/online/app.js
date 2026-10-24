@@ -81,8 +81,9 @@
     if(password!==confirm)return say("newPasswordMessage","The passwords do not match.");
     const btn=$("saveNewPassword");btn.disabled=true;
     try{const {error}=await client.auth.updateUser({password});if(error)throw error;
+      const recoveredEmail=currentUser?.email||$("resetEmail").value;
       passwordRecoveryMode=false;await client.auth.signOut();$("newPasswordForm").hidden=true;
-      showLogin("Password updated. You can now sign in with your new password.",$("resetEmail").value);
+      showLogin("Password updated. You can now sign in with your new password.",recoveredEmail);
     }catch(err){say("newPasswordMessage",err.message||"Could not update the password.");}
     finally{btn.disabled=false;}
   });
