@@ -45,5 +45,6 @@ Use disposable test accounts first:
 8. Save daily/weekly reports offline and verify that they sync when connectivity returns.
 
 ## Known remaining work
-- The latest APK compiles successfully, but the complete multi-role flow still needs a real-device end-to-end test using the roles above.
-- The Android APK must be tested end-to-end on a real device with disposable organisation, supervisor and student accounts before using it for official records. PDF/CSV exports, audit history for attendance corrections/mark adjustments, conflict-resolution UI, password-recovery polish, and a signed production release remain future hardening work.
+- The latest debug APK compiles successfully, but the complete multi-role flow still needs a real-device end-to-end test using disposable accounts for the roles above.
+- Daily and weekly PDF print/save controls are implemented for student, supervisor and organisation workspaces. Verify generated reports on the target Android device before using them for official records.
+- CSV export, audit history for attendance corrections/mark adjustments, conflict-resolution UI, additional password-recovery polish, and a signed production release remain future hardening work.
