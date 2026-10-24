@@ -1044,6 +1044,78 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 val studentNames = students.associate { it.optString("id") to it.optString("full_name") }
+
+                // Quick-access report buttons so organisation staff can open student activities directly.
+                val reportActions = panel()
+                reportActions.addView(label("VIEW STUDENT ACTIVITIES", 12f, blue, true))
+                reportActions.addView(label("Open an individual student's daily activity or weekly summary.", 13f, ink)
+                    .apply { setPadding(0, dp(5), 0, dp(10)) })
+
+                fun openStudentReport(weeklyReport: Boolean) {
+                    val reportData = if (weeklyReport) weekly else daily
+                    if (reportData.length() == 0) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle(if (weeklyReport) "Weekly reports" else "Daily reports")
+                            .setMessage(if (weeklyReport) "No weekly summaries have been submitted yet." else "No daily reports have been submitted yet.")
+                            .setPositiveButton("OK", null).show()
+                        return
+                    }
+                    val reportItems = ArrayList<JSONObject>()
+                    val labels = ArrayList<String>()
+                    for (i in 0 until reportData.length()) {
+                        val item = reportData.optJSONObject(i) ?: continue
+                        val studentName = studentNames[item.optString("student_id")].orEmpty().ifBlank { "Student" }
+                        val reportDate = item.optString(if (weeklyReport) "week_start" else "entry_date")
+                        val activity = item.optString(if (weeklyReport) "summary" else "work_done")
+                        labels.add("$studentName • $reportDate\n$activity")
+                        reportItems.add(item)
+                    }
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle(if (weeklyReport) "Student weekly reports" else "Student daily reports")
+                        .setItems(labels.toTypedArray()) { _, which ->
+                            val item = reportItems[which]
+                            val studentName = studentNames[item.optString("student_id")].orEmpty().ifBlank { "Student" }
+                            val content = if (weeklyReport) {
+                                listOf(
+                                    "Student: $studentName",
+                                    "Week starting: " + item.optString("week_start"),
+                                    "Work completed: " + item.optString("summary"),
+                                    "Skills learned: " + item.optString("skills_learned").ifBlank { "—" },
+                                    "Challenges: " + item.optString("challenges").ifBlank { "—" },
+                                    "Supervisor feedback: " + item.optString("supervisor_comments").ifBlank { "—" },
+                                    "Review status: " + if (item.isNull("supervisor_signed_at")) "Awaiting review" else "Reviewed"
+                                ).joinToString("\n\n")
+                            } else {
+                                listOf(
+                                    "Student: $studentName",
+                                    "Date: " + item.optString("entry_date"),
+                                    "Work done: " + item.optString("work_done"),
+                                    "Tools / equipment: " + item.optString("tools_used").ifBlank { "—" },
+                                    "Skills learned: " + item.optString("skills_learned").ifBlank { "—" },
+                                    "Challenges: " + item.optString("challenges").ifBlank { "—" },
+                                    "Recommendations: " + item.optString("recommendations").ifBlank { "—" },
+                                    "Supervisor feedback: " + item.optString("supervisor_comments").ifBlank { "—" },
+                                    "Review status: " + if (item.isNull("supervisor_signed_at")) "Awaiting review" else "Reviewed"
+                                ).joinToString("\n\n")
+                            }
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle(if (weeklyReport) "Weekly activity details" else "Daily activity details")
+                                .setMessage(content)
+                                .setPositiveButton("Close", null)
+                                .show()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+
+                reportActions.addView(actionButton("View Daily Reports", blue).apply {
+                    setOnClickListener { openStudentReport(false) }
+                }, matchWrap())
+                reportActions.addView(actionButton("View Weekly Reports", navy).apply {
+                    setOnClickListener { openStudentReport(true) }
+                }, matchWrap())
+                screenHost.addView(reportActions, matchWrap())
+
                 val dailyRows = ArrayList<List<String>>()
                 for (i in 0 until daily.length()) {
                     val r = daily.getJSONObject(i)
