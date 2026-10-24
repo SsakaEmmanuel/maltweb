@@ -238,6 +238,14 @@ internal class SupabaseApi(private val context: Context) {
         )
     }
 
+    fun fetchMyDailyEntries(session: AuthSession): JSONArray =
+        request("GET", "/rest/v1/daily_entries?select=id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations,supervisor_comments,supervisor_signed_at,updated_at&student_id=eq.${session.userId}&order=entry_date.desc&limit=1000", token = session.accessToken) as? JSONArray
+            ?: throw IOException("Unexpected daily-entry sync response.")
+
+    fun fetchMyWeeklySummaries(session: AuthSession): JSONArray =
+        request("GET", "/rest/v1/weekly_summaries?select=id,week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at,updated_at&student_id=eq.${session.userId}&order=week_start.desc&limit=500", token = session.accessToken) as? JSONArray
+            ?: throw IOException("Unexpected weekly-summary sync response.")
+
     fun fetchMyDailyReviews(session: AuthSession): JSONArray {
         return request(
             "GET",

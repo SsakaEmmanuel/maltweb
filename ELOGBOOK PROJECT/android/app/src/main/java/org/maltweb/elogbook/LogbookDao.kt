@@ -11,6 +11,9 @@ interface LogbookDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(entry: LogbookEntry)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSynced(entries: List<LogbookEntry>)
+
     @Query("SELECT * FROM daily_entries WHERE ownerUserId = :ownerId AND entryDate = :entryDate LIMIT 1")
     suspend fun findByOwnerAndDate(ownerId: String, entryDate: String): LogbookEntry?
 

@@ -48,6 +48,44 @@ internal class SyncWorker(context: Context, params: WorkerParameters) : Coroutin
                     reviewedAt
                 )
             }
+            val remoteDaily = api.fetchMyDailyEntries(session)
+            val syncedDaily = ArrayList<LogbookEntry>()
+            for (i in 0 until remoteDaily.length()) {
+                val row = remoteDaily.getJSONObject(i)
+                val reviewedAt = if (row.isNull("supervisor_signed_at")) null else row.optString("supervisor_signed_at")
+                val updated = row.optString("updated_at")
+                syncedDaily.add(LogbookEntry(
+                    id = row.optString("id"), entryDate = row.optString("entry_date"),
+                    workDone = row.optString("work_done"), toolsUsed = row.optString("tools_used"),
+                    skillsLearned = row.optString("skills_learned"), challenges = row.optString("challenges"),
+                    recommendations = row.optString("recommendations"), ownerUserId = session.userId,
+                    syncStatus = "synced", supervisorComments = row.optString("supervisor_comments", ""),
+                    supervisorReviewedAt = reviewedAt,
+                    updatedAt = try { java.time.Instant.parse(updated).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
+                ))
+            }
+            val pendingDaily = dao.pendingSync(session.userId)
+            val pendingDates = pendingDaily.map { it.entryDate }.toSet()
+            dao.saveSynced(syncedDaily.filter { it.entryDate !in pendingDates })
+
+            val remoteWeekly = api.fetchMyWeeklySummaries(session)
+            val syncedWeekly = ArrayList<WeeklySummary>()
+            for (i in 0 until remoteWeekly.length()) {
+                val row = remoteWeekly.getJSONObject(i)
+                val reviewedAt = if (row.isNull("supervisor_signed_at")) null else row.optString("supervisor_signed_at")
+                val updated = row.optString("updated_at")
+                syncedWeekly.add(WeeklySummary(
+                    id = row.optString("id"), weekStart = row.optString("week_start"),
+                    summary = row.optString("summary"), skillsLearned = row.optString("skills_learned", ""),
+                    challenges = row.optString("challenges", ""), ownerUserId = session.userId,
+                    syncStatus = "synced", supervisorComments = row.optString("supervisor_comments", ""),
+                    supervisorReviewedAt = reviewedAt,
+                    updatedAt = try { java.time.Instant.parse(updated).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
+                ))
+            }
+            val pendingWeekly = weeklyDao.pendingSync(session.userId)
+            val pendingWeeks = pendingWeekly.map { it.weekStart }.toSet()
+            weeklyDao.saveSynced(syncedWeekly.filter { it.weekStart !in pendingWeeks })
             Result.success()
         } catch (e: IOException) {
             if (runAttemptCount < 5) Result.retry() else Result.failure()

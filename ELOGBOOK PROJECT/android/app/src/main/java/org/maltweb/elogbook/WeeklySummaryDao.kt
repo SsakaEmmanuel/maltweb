@@ -11,6 +11,9 @@ interface WeeklySummaryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun save(summary: WeeklySummary)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSynced(summaries: List<WeeklySummary>)
+
     @Query("SELECT * FROM weekly_summaries WHERE ownerUserId = :ownerId AND weekStart = :weekStart LIMIT 1")
     suspend fun findByOwnerAndWeek(ownerId: String, weekStart: String): WeeklySummary?
 
