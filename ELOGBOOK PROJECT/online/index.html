@@ -99,20 +99,20 @@
       <label>Challenges and solutions<textarea id="weeklyChallenges" rows="3" maxlength="4000"></textarea></label>
       <div class="actions"><button type="submit">Save weekly summary</button><button type="button" id="refreshWeekly" class="secondary">Refresh summaries</button><button type="button" class="secondary" id="toggleWeeklyTable">View weekly reports as table</button></div>
     </form><p id="weeklyMessage" class="message" role="status"></p></section>
-    <section class="panel"><div class="section-head"><h2>My saved records</h2><span class="muted">Entries, feedback and review status</span></div><div id="entries" class="table-wrap"></div><div id="weeklyEntries" class="table-wrap"></div></section>
+    <section class="panel"><div class="section-head"><h2>My saved records</h2><span class="muted">Entries, feedback and review status</span></div><div id="entries" class="table-host"></div><div id="weeklyEntries" class="table-host"></div></section>
     <section id="entryDetailPanel" class="panel record-detail-panel" hidden>
       <p class="eyebrow">SAVED RECORD</p><h2 id="entryDetailTitle">Daily record details</h2>
       <p class="muted">All saved fields and supervisor feedback are displayed below. Use Edit when you intentionally want to change the record.</p>
-      <div id="entryDetailTable" class="table-wrap"></div>
+      <div id="entryDetailTable" class="table-host"></div>
       <div class="actions"><button type="button" id="editDetailedEntry">Edit this record</button><button type="button" class="secondary" id="closeDetailEntry">Back to saved records</button></div>
     </section>
-    <section class="panel"><h2>Attendance and performance</h2><p id="studentPerformanceMessage" class="muted">Your attendance and awarded marks will appear here.</p><div id="studentMarks" class="table-wrap"></div></section>
-    <section class="panel"><h2>Course ranking</h2><p class="muted">Ranking is based on recorded performance marks for students in your organisation and course.</p><div id="studentRankings" class="table-wrap"></div></section>
+    <section class="panel"><h2>Attendance and performance</h2><p id="studentPerformanceMessage" class="muted">Your attendance and awarded marks will appear here.</p><div id="studentMarks" class="table-host"></div></section>
+    <section class="panel"><h2>Course ranking</h2><p class="muted">Ranking is based on recorded performance marks for students in your organisation and course.</p><div id="studentRankings" class="table-host"></div></section>
   </section>
 
   <section id="supervisorPanel" hidden>
     <section class="panel"><div class="section-head"><div><p class="eyebrow">SUPERVISOR WORKSPACE</p><h2>Assigned student reporting</h2></div><button type="button" class="secondary" id="refreshReviews">Refresh</button></div>
-      <p class="muted">Review student submissions without changing their original report text.</p><p id="reviewMessage" class="message" role="status"></p><div id="reviewQueue" class="table-wrap"></div>
+      <p class="muted">Review student submissions without changing their original report text.</p><p id="reviewMessage" class="message" role="status"></p><div id="reviewQueue" class="table-host"></div>
     </section>
     <section class="panel"><h2>Attendance</h2><p class="muted">Record attendance for students assigned to you.</p><div class="two"><label>Student<select id="attendanceStudent"></select></label><label>Date<input id="attendanceDate" type="date"></label></div><label>Status<select id="attendanceStatus"><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="excused">Excused</option></select></label><label>Remarks<textarea id="attendanceRemarks" rows="2"></textarea></label><button type="button" id="saveAttendance">Save attendance</button><p id="attendanceMessage" class="message" role="status"></p>
     </section>
@@ -122,11 +122,11 @@
 
   <section id="organizationPanel" hidden>
     <section class="panel"><p class="eyebrow">ORGANISATION MANAGEMENT</p><h2>Organisation key</h2><p class="muted">Share this key only with verified staff and students who belong to your organisation.</p><div class="actions"><button type="button" id="revealOrgKey">Show organisation key</button><button type="button" class="secondary" id="rotateOrgKey">Generate new key</button></div><p id="orgKeyDisplay" class="key-display" hidden></p><button type="button" class="secondary" id="copyOrgKey" hidden>Copy key</button></section>
-    <section class="panel"><h2>Registered supervisors</h2><p class="muted">Approve or reject supervisor registration requests for your organisation.</p><div id="organizationSupervisors" class="table-wrap"></div></section>
-    <section class="panel"><h2>Registered students</h2><p class="muted">View student courses, index numbers, activity records and reporting progress.</p><div id="organizationStudents" class="table-wrap"></div></section>
+    <section class="panel"><h2>Registered supervisors</h2><p class="muted">Approve or reject supervisor registration requests for your organisation.</p><div id="organizationSupervisors" class="table-host"></div></section>
+    <section class="panel"><h2>Registered students</h2><p class="muted">View student courses, index numbers, activity records and reporting progress.</p><div id="organizationStudents" class="table-host"></div></section>
     <section class="panel"><h2>Assign a supervisor</h2><div class="two"><label>Student<select id="assignStudent"></select></label><label>Approved supervisor<select id="assignSupervisor"></select></label></div><label>Supervisor type<select id="assignType"><option value="field_supervisor">Field supervisor</option><option value="institution_supervisor">Institution supervisor</option></select></label><button id="saveAssignment" type="button">Assign supervisor</button><p id="assignmentMessage" class="message" role="status"></p></section>
-    <section class="panel"><h2>Organisation attendance</h2><div id="organizationAttendance" class="table-wrap"></div></section>
-    <section class="panel"><h2>Organisation performance and rankings</h2><div id="organizationPerformance" class="table-wrap"></div></section>
+    <section class="panel"><h2>Organisation attendance</h2><div id="organizationAttendance" class="table-host"></div></section>
+    <section class="panel"><h2>Organisation performance and rankings</h2><div id="organizationPerformance" class="table-host"></div></section>
     <section class="panel"><h2>Award student marks</h2><div class="two"><label>Student<select id="orgMarkStudent"></select></label><label>Score (0–100)<input id="orgMarkScore" type="number" min="0" max="100" step="0.5"></label></div><label>Category<input id="orgMarkCategory" value="General performance"></label><label>Feedback<textarea id="orgMarkFeedback" rows="2"></textarea></label><button id="saveOrgMark" type="button">Award marks</button><p id="orgMarkMessage" class="message" role="status"></p></section>
   </section>
 </section>

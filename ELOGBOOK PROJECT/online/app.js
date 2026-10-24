@@ -186,14 +186,52 @@
     if(!client||!currentUser||currentRole!=="student")return;
     const {data,error}=await client.from("daily_entries").select("id,entry_date,work_done,tools_used,skills_learned,challenges,recommendations,supervisor_comments,supervisor_signed_at,updated_at").eq("student_id",currentUser.id).order("entry_date",{ascending:false}).limit(200);
     if(error){$("entries").textContent="Could not load saved entries: "+error.message;return;}
-    const rows=(data||[]).map(d=>{
-      const view=el("button","View / edit","secondary");view.type="button";
-      view.setAttribute("data-loading-label","Opening saved daily record");
-      view.addEventListener("click",()=>openDailyRecord(d));
-      return [d.entry_date,d.work_done,d.tools_used,d.skills_learned,d.challenges,d.recommendations,d.supervisor_comments||"—",d.supervisor_signed_at?"Reviewed":"Awaiting review",view];
-    });
-    $("dailyCount").textContent=String((data||[]).length);
-    $("entries").replaceChildren(makeTable(["Date","Work done","Tools","Skills learned","Challenges","Recommendations","Supervisor feedback","Review","Action"],rows));
+    const records=data||[];
+    const rows=records.map(d=>[
+      d.entry_date,d.work_done,d.tools_used,d.skills_learned,d.challenges,d.recommendations,
+      d.supervisor_comments||"—",d.supervisor_signed_at?"Reviewed":"Awaiting review"
+    ]);
+    $("dailyCount").textContent=String(records.length);
+    const tablePanel=makeTable(["Date","Work done","Tools","Skills learned","Challenges","Recommendations","Supervisor feedback","Review"],rows);
+    const table=tablePanel.querySelector("table");
+    selectedDailyEntry=records.find(d=>selectedDailyEntry&&d.id===selectedDailyEntry.id)||records[0]||null;
+    if(table&&records.length){
+      const tableRows=Array.from(table.querySelectorAll("tbody tr"));
+      const actionBar=el("div",undefined,"record-table-actions");
+      const selectionMessage=el("p","Tap a row to select a saved record.","muted small");
+      const actionButton=el("button","View / edit selected record","secondary");
+      actionButton.type="button";
+      actionButton.disabled=!selectedDailyEntry;
+      const selectRecord=index=>{
+        selectedDailyEntry=records[index];
+        tableRows.forEach((row,rowIndex)=>{
+          const selected=rowIndex===index;
+          row.classList.toggle("is-selected",selected);
+          row.setAttribute("aria-selected",String(selected));
+        });
+        selectionMessage.textContent="Selected record: "+(selectedDailyEntry.entry_date||"")+" • use the button below to open it.";
+        actionButton.disabled=false;
+      };
+      tableRows.forEach((row,index)=>{
+        row.classList.add("selectable-record-row");
+        row.tabIndex=0;
+        row.setAttribute("aria-label","Select daily record dated "+(records[index].entry_date||""));
+        row.addEventListener("click",()=>selectRecord(index));
+        row.addEventListener("keydown",event=>{
+          if(event.key==="Enter"||event.key===" "){event.preventDefault();selectRecord(index);}
+        });
+      });
+      actionButton.addEventListener("click",()=>{
+        if(selectedDailyEntry)openDailyRecord(selectedDailyEntry);
+      });
+      actionBar.append(selectionMessage,actionButton);
+      tablePanel.append(actionBar);
+      const initialIndex=Math.max(0,records.findIndex(d=>selectedDailyEntry&&d.id===selectedDailyEntry.id));
+      selectRecord(initialIndex);
+    }else{
+      selectedDailyEntry=null;
+    }
+    $("entries").replaceChildren(tablePanel);
   }
   async function loadWeekly(){if(!client||!currentUser||currentRole!=="student")return;const {data,error}=await client.from("weekly_summaries").select("week_start,summary,skills_learned,challenges,supervisor_comments,supervisor_signed_at,updated_at").eq("student_id",currentUser.id).order("week_start",{ascending:false}).limit(100);if(error){$("weeklyEntries").textContent="Could not load weekly reports: "+error.message;return;}const rows=(data||[]).map(d=>{const edit=el("button","Edit","secondary");edit.type="button";edit.addEventListener("click",()=>{$("weekStart").value=d.week_start;$("weeklySummary").value=d.summary||"";$("weeklySkills").value=d.skills_learned||"";$("weeklyChallenges").value=d.challenges||"";say("weeklyMessage","Editing weekly summary for week starting "+d.week_start+". Saving updates this report.");$("weeklyForm").scrollIntoView({behavior:"smooth",block:"start"});});return [d.week_start,d.summary,d.skills_learned,d.challenges,d.supervisor_comments||"—",d.supervisor_signed_at?"Reviewed":"Awaiting review",edit];});$("weeklyEntries").replaceChildren(makeTable(["Week starting","Summary","Skills learned","Challenges","Supervisor feedback","Review","Action"],rows));}
   async function getAssignmentStudents(){const {data:assignments,error}=await client.from("supervisor_assignments").select("student_id,assignment_type").eq("supervisor_id",currentUser.id);if(error)throw error;const ids=Array.from(new Set((assignments||[]).filter(a=>a.assignment_type===currentRole).map(a=>a.student_id)));if(!ids.length){assignedStudents=[];return [];}const {data:profiles,error:pe}=await client.from("profiles").select("id,full_name,course,student_number,organization_id").in("id",ids);if(pe)throw pe;assignedStudents=profiles||[];return assignedStudents;}
