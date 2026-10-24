@@ -83,8 +83,8 @@ internal class SyncWorker(context: Context, params: WorkerParameters) : Coroutin
                     updatedAt = try { java.time.Instant.parse(updated).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
                 ))
             }
-            val pendingWeekly = weeklyDao.pendingSync(session.userId)
-            val pendingWeeks = pendingWeekly.map { it.weekStart }.toSet()
+            val pendingWeeklyAfterPull = weeklyDao.pendingSync(session.userId)
+            val pendingWeeks = pendingWeeklyAfterPull.map { it.weekStart }.toSet()
             weeklyDao.saveSynced(syncedWeekly.filter { it.weekStart !in pendingWeeks })
             Result.success()
         } catch (e: IOException) {
