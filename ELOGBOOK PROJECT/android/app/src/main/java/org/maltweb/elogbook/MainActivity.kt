@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -128,6 +129,16 @@ class MainActivity : ComponentActivity() {
         frame.addView(navigationOverlay, FrameLayout.LayoutParams(-1, -1))
         setContentView(frame)
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        var lastVisibleFrameBottom = 0
+        frame.viewTreeObserver.addOnGlobalLayoutListener {
+            val visibleFrame = android.graphics.Rect()
+            window.decorView.getWindowVisibleDisplayFrame(visibleFrame)
+            if (lastVisibleFrameBottom != 0 &&
+                kotlin.math.abs(visibleFrame.bottom - lastVisibleFrameBottom) > dp(2)) {
+                scrollFocusedInputAboveKeyboard()
+            }
+            lastVisibleFrameBottom = visibleFrame.bottom
+        }
 
         if (currentSession == null) {
             showAuth()
@@ -471,6 +482,35 @@ class MainActivity : ComponentActivity() {
         tableCard.addView(table)
         screenHost.addView(tableCard, matchWrap())
         val owner = currentSession?.userId ?: "local"
+        screenHost.addView(actionButton("Download / Print Daily PDF", blue).apply {
+            setOnClickListener {
+                lifecycleScope.launch {
+                    try {
+                        val entries = withContext(Dispatchers.IO) {
+                            db.entries().observeAllForOwner(owner).first()
+                        }
+                        val data = JSONArray()
+                        entries.forEach { entry ->
+                            data.put(JSONObject()
+                                .put("student_id", owner)
+                                .put("entry_date", entry.entryDate)
+                                .put("work_done", entry.workDone)
+                                .put("tools_used", entry.toolsUsed)
+                                .put("skills_learned", entry.skillsLearned)
+                                .put("challenges", entry.challenges)
+                                .put("recommendations", entry.recommendations)
+                                .put("supervisor_comments", entry.supervisorComments)
+                                .put("supervisor_signed_at", entry.supervisorReviewedAt ?: JSONObject.NULL))
+                        }
+                        val displayName = currentProfile?.optString("full_name").orEmpty()
+                            .ifBlank { currentSession?.email?.substringBefore("@") ?: "Student" }
+                        printReportPdf("My Daily Activities", data, mapOf(owner to displayName), false)
+                    } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, e.message ?: "Could not prepare the daily PDF.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }, matchWrap())
         lifecycleScope.launch {
             db.entries().observeAllForOwner(owner).collect { entries ->
                 if (activeScreen != "records") return@collect
@@ -608,6 +648,34 @@ class MainActivity : ComponentActivity() {
         val saved = panel()
         saved.addView(label("SAVED WEEKLY SUMMARIES", 12f, blue, true))
         saved.addView(label("Review status and supervisor comments appear with each saved report.", 13f, ink).apply { setPadding(0, dp(4), 0, dp(10)) })
+        screenHost.addView(actionButton("Download / Print Weekly PDF", blue).apply {
+            setOnClickListener {
+                val owner = currentSession?.userId ?: "local"
+                lifecycleScope.launch {
+                    try {
+                        val summaries = withContext(Dispatchers.IO) {
+                            db.weeklies().observeAllForOwner(owner).first()
+                        }
+                        val data = JSONArray()
+                        summaries.forEach { item ->
+                            data.put(JSONObject()
+                                .put("student_id", owner)
+                                .put("week_start", item.weekStart)
+                                .put("summary", item.summary)
+                                .put("skills_learned", item.skillsLearned)
+                                .put("challenges", item.challenges)
+                                .put("supervisor_comments", item.supervisorComments)
+                                .put("supervisor_signed_at", item.supervisorReviewedAt ?: JSONObject.NULL))
+                        }
+                        val displayName = currentProfile?.optString("full_name").orEmpty()
+                            .ifBlank { currentSession?.email?.substringBefore("@") ?: "Student" }
+                        printReportPdf("My Weekly Summaries", data, mapOf(owner to displayName), true)
+                    } catch (e: Exception) {
+                        Toast.makeText(this@MainActivity, e.message ?: "Could not prepare the weekly PDF.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }, matchWrap())
         weeklyList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         saved.addView(weeklyList)
         screenHost.addView(saved, matchWrap())
@@ -670,6 +738,18 @@ class MainActivity : ComponentActivity() {
         addPageHeader("Supervisor reviews", "Review assigned daily records and weekly summaries.")
         val message = label("Loading assigned student reports…", 13f, ink).apply { setPadding(0, 0, 0, dp(10)) }
         screenHost.addView(message)
+        var printableDaily = JSONArray()
+        var printableWeekly = JSONArray()
+        var printableNames: Map<String, String> = emptyMap()
+        val reportExport = panel()
+        reportExport.addView(label("DOWNLOAD SUPERVISOR REPORTS", 12f, blue, true))
+        reportExport.addView(actionButton("Download / Print Daily PDF", blue).apply {
+            setOnClickListener { printReportPdf("Assigned Student Daily Reports", printableDaily, printableNames, false) }
+        }, matchWrap())
+        reportExport.addView(actionButton("Download / Print Weekly PDF", navy).apply {
+            setOnClickListener { printReportPdf("Assigned Student Weekly Summaries", printableWeekly, printableNames, true) }
+        }, matchWrap())
+        screenHost.addView(reportExport, matchWrap())
         val queue = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         screenHost.addView(queue, matchWrap())
         screenHost.addView(actionButton("Refresh review queue", blue).apply {
@@ -692,6 +772,18 @@ class MainActivity : ComponentActivity() {
                 sessionStore.save(reports.first)
                 val daily = reports.second
                 val weekly = reports.third
+                printableDaily = daily
+                printableWeekly = weekly
+                val studentNames = LinkedHashMap<String, String>()
+                for (reportArray in listOf(daily, weekly)) {
+                    for (i in 0 until reportArray.length()) {
+                        val row = reportArray.optJSONObject(i) ?: continue
+                        val name = row.optJSONObject("student")?.optString("full_name").orEmpty()
+                        val studentId = row.optString("student_id")
+                        if (studentId.isNotBlank() && name.isNotBlank()) studentNames[studentId] = name
+                    }
+                }
+                printableNames = studentNames
                 queue.removeAllViews()
                 if (daily.length() == 0 && weekly.length() == 0) {
                     message.text = "No reports are assigned to this supervisor account yet."
@@ -1600,6 +1692,44 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun scrollFocusedInputAboveKeyboard(field: EditText? = currentFocus as? EditText) {
+        if (field == null || !field.isShown || !field.hasFocus() || !::scrollContainer.isInitialized) return
+        val visibleFrame = android.graphics.Rect()
+        window.decorView.getWindowVisibleDisplayFrame(visibleFrame)
+        val location = IntArray(2)
+        field.getLocationOnScreen(location)
+
+        // Keep the current text line visible rather than trying to fit a large multi-line box.
+        val textLayout = field.layout
+        val selection = field.selectionStart.coerceAtLeast(0)
+        val caretBounds = android.graphics.Rect()
+        val caretTop: Int
+        val caretBottom: Int
+        if (textLayout != null && textLayout.lineCount > 0) {
+            val line = textLayout.getLineForOffset(selection.coerceAtMost(textLayout.text.length))
+            textLayout.getLineBounds(line, caretBounds)
+            caretTop = location[1] + caretBounds.top
+            caretBottom = location[1] + caretBounds.bottom
+        } else {
+            caretTop = location[1]
+            caretBottom = location[1] + field.height
+        }
+
+        val bottomOverflow = caretBottom + dp(18) - visibleFrame.bottom
+        if (bottomOverflow > 0) {
+            scrollContainer.post {
+                if (field.hasFocus()) scrollContainer.smoothScrollBy(0, bottomOverflow)
+            }
+        } else {
+            val topOverflow = visibleFrame.top + dp(12) - caretTop
+            if (topOverflow > 0) {
+                scrollContainer.post {
+                    if (field.hasFocus()) scrollContainer.smoothScrollBy(0, -topOverflow)
+                }
+            }
+        }
+    }
+
     private fun addField(parent: LinearLayout, fieldLabel: String, initial: String, multiline: Boolean): EditText {
         parent.addView(label(fieldLabel, 13f, ink, true).apply { setPadding(0, dp(12), 0, dp(5)) })
         return EditText(this).also { field ->
@@ -1617,13 +1747,9 @@ class MainActivity : ComponentActivity() {
             }
             field.setOnFocusChangeListener { _, hasFocus ->
                 if (hasFocus && ::scrollContainer.isInitialized) {
-                    field.post {
-                        val visibleRect = android.graphics.Rect(0, 0, field.width, field.height)
-                        field.requestRectangleOnScreen(visibleRect, true)
-                        scrollContainer.postDelayed({
-                            if (field.hasFocus()) field.requestRectangleOnScreen(visibleRect, true)
-                        }, 220L)
-                    }
+                    field.post { scrollFocusedInputAboveKeyboard(field) }
+                    field.postDelayed({ if (field.hasFocus()) scrollFocusedInputAboveKeyboard(field) }, 180L)
+                    field.postDelayed({ if (field.hasFocus()) scrollFocusedInputAboveKeyboard(field) }, 380L)
                 }
             }
             parent.addView(field, matchWrap())
