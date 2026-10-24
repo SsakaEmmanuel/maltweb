@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+<title id="title">E-Logbook logo</title>
+<path fill="#10223d" d="M64 5C45 5 30 13 15 23v42c0 27 17 45 49 58 32-13 49-31 49-58V23C98 13 83 5 64 5Z"/>
+<path fill="#fff" d="M25 34c13-7 25-6 39 2v61c-14-10-27-13-39-8V34Zm78 0c-13-7-25-6-39 2v61c14-10 27-13 39-8V34Z"/>
+<path fill="none" stroke="#10223d" stroke-linecap="round" stroke-width="4" d="M33 46c8-2 15 0 22 4M33 58c8-2 15 0 22 4M33 70c8-2 15 0 22 4"/>
+<path fill="none" stroke="#f4b942" stroke-linecap="round" stroke-linejoin="round" stroke-width="8" d="m72 62 9 9 18-22"/>
+<path fill="none" stroke="#f4b942" stroke-linecap="round" stroke-width="3" d="M64 36v63"/>
+</svg>

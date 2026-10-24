@@ -4,12 +4,21 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#10223d">
   <title>E-Logbook | Attachment Management</title>
+  <link rel="icon" type="image/svg+xml" href="elogbook-logo.svg">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script><script defer src="app.js"></script>
 </head>
 <body>
-<header class="top"><div class="brand-mark">EL</div><div><strong>E-Logbook</strong><small>Industrial Attachment Record</small></div><span id="connection" class="pill">Checking setup…</span></header>
+<header class="top"><img class="brand-logo" src="elogbook-logo.svg" alt="E-Logbook logo"><div><strong>E-Logbook</strong><small>Industrial Attachment Record</small></div><span id="connection" class="pill">Checking setup…</span></header>
+<div id="navigationLoader" class="navigation-loader" hidden role="status" aria-live="polite">
+  <div class="loader-card">
+    <img class="loader-logo" src="elogbook-logo.svg" alt="">
+    <span class="loader-spinner" aria-hidden="true"></span>
+    <strong id="navigationLoaderText">Opening E-Logbook…</strong>
+    <small>Please wait</small>
+  </div>
+</div>
 <main>
 <section id="authPanel" class="panel auth">
   <p class="eyebrow">YOUR ATTACHMENT, ORGANIZED</p><h1>One logbook. Your whole organisation.</h1>
@@ -79,6 +88,12 @@
       <div class="actions"><button type="submit">Save weekly summary</button><button type="button" id="refreshWeekly" class="secondary">Refresh summaries</button><button type="button" class="secondary" id="toggleWeeklyTable">View weekly reports as table</button></div>
     </form><p id="weeklyMessage" class="message" role="status"></p></section>
     <section class="panel"><div class="section-head"><h2>My saved records</h2><span class="muted">Entries, feedback and review status</span></div><div id="entries" class="table-wrap"></div><div id="weeklyEntries" class="table-wrap"></div></section>
+    <section id="entryDetailPanel" class="panel record-detail-panel" hidden>
+      <p class="eyebrow">SAVED RECORD</p><h2 id="entryDetailTitle">Daily record details</h2>
+      <p class="muted">All saved fields and supervisor feedback are displayed below. Use Edit when you intentionally want to change the record.</p>
+      <div id="entryDetailTable" class="table-wrap"></div>
+      <div class="actions"><button type="button" id="editDetailedEntry">Edit this record</button><button type="button" class="secondary" id="closeDetailEntry">Back to saved records</button></div>
+    </section>
     <section class="panel"><h2>Attendance and performance</h2><p id="studentPerformanceMessage" class="muted">Your attendance and awarded marks will appear here.</p><div id="studentMarks" class="table-wrap"></div></section>
     <section class="panel"><h2>Course ranking</h2><p class="muted">Ranking is based on recorded performance marks for students in your organisation and course.</p><div id="studentRankings" class="table-wrap"></div></section>
   </section>

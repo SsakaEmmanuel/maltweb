@@ -250,10 +250,18 @@ internal class SupabaseApi(private val context: Context) {
     }
 
     fun fetchCourseStudents(session: AuthSession, organizationId: String, course: String): JSONArray {
-        val encodedCourse = java.net.URLEncoder.encode(course, "UTF-8")
+        val normalizedOrganizationId = organizationId.trim()
+        if (!normalizedOrganizationId.matches(Regex("(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))) {
+            throw IOException("Your account is not linked to a valid organisation yet. Complete your profile registration before viewing course rankings.")
+        }
+        if (course.isBlank() || course.trim().equals("null", ignoreCase = true) ||
+            course.trim().equals("undefined", ignoreCase = true)) {
+            throw IOException("Your profile does not contain a valid course. Complete your profile before viewing course rankings.")
+        }
+        val encodedCourse = java.net.URLEncoder.encode(course.trim(), "UTF-8")
         return request(
             "GET",
-            "/rest/v1/profiles?select=id,full_name,course,student_number&organization_id=eq.$organizationId&course=eq.$encodedCourse&role=eq.student&order=full_name.asc",
+            "/rest/v1/profiles?select=id,full_name,course,student_number&organization_id=eq.$normalizedOrganizationId&course=eq.$encodedCourse&role=eq.student&order=full_name.asc",
             token = session.accessToken
         ) as? JSONArray ?: throw IOException("Unexpected course roster response.")
     }

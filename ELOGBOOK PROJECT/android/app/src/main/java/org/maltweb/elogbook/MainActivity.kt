@@ -22,6 +22,12 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
     private lateinit var db: LogbookDatabase
     private lateinit var screenHost: LinearLayout
+    private lateinit var scrollContainer: ScrollView
+    private lateinit var navigationOverlay: LinearLayout
+    private lateinit var navigationLoadingLabel: TextView
+    private var navigationGeneration = 0
+    private var navigationStartedAt = 0L
+    private val navigationHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
     private lateinit var status: TextView
     private lateinit var authMessage: TextView
     private lateinit var emailField: EditText
@@ -74,10 +80,51 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(18), dp(20), dp(18))
         }
-        val scroll = ScrollView(this).apply { isFillViewport = true }
-        scroll.addView(screenHost)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        scrollContainer = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            setPadding(0, 0, 0, dp(28))
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        }
+        scrollContainer.addView(screenHost)
+        val frame = FrameLayout(this).apply { setBackgroundColor(pageBackground) }
+        frame.addView(scrollContainer, FrameLayout.LayoutParams(-1, -1))
+        navigationOverlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            visibility = View.GONE
+            alpha = 0f
+            isClickable = true
+            isFocusable = true
+            setBackgroundColor(Color.argb(222, 244, 247, 252))
+        }
+        val loadingCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(28), dp(22), dp(28), dp(22))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.rgb(225, 231, 240))
+                cornerRadius = dp(20).toFloat()
+            }
+        }
+        loadingCard.addView(ImageView(this).apply {
+            setImageResource(R.drawable.elogbook_logo)
+            contentDescription = "E-Logbook logo"
+        }, LinearLayout.LayoutParams(dp(58), dp(58)))
+        loadingCard.addView(ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(blue)
+        }, LinearLayout.LayoutParams(dp(34), dp(34)).apply {
+            topMargin = dp(12)
+            bottomMargin = dp(10)
+        })
+        navigationLoadingLabel = label("Opening E-Logbook…", 13f, navy, true)
+        loadingCard.addView(navigationLoadingLabel)
+        navigationOverlay.addView(loadingCard, LinearLayout.LayoutParams(-2, -2))
+        frame.addView(navigationOverlay, FrameLayout.LayoutParams(-1, -1))
+        setContentView(frame)
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         if (currentSession == null) {
             showAuth()
@@ -116,18 +163,47 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun showNavigationLoading(message: String) {
+        if (!::navigationOverlay.isInitialized || !::navigationLoadingLabel.isInitialized) return
+        navigationGeneration += 1
+        navigationStartedAt = android.os.SystemClock.elapsedRealtime()
+        navigationLoadingLabel.text = message
+        navigationOverlay.animate().cancel()
+        navigationOverlay.visibility = View.VISIBLE
+        navigationOverlay.alpha = 0f
+        navigationOverlay.animate().alpha(1f).setDuration(140).start()
+    }
+
+    private fun hideNavigationLoading() {
+        if (!::navigationOverlay.isInitialized) return
+        val generation = navigationGeneration
+        val elapsed = android.os.SystemClock.elapsedRealtime() - navigationStartedAt
+        val wait = (320L - elapsed).coerceAtLeast(0L)
+        navigationHandler.postDelayed({
+            if (generation != navigationGeneration || !::navigationOverlay.isInitialized) return@postDelayed
+            navigationOverlay.animate().cancel()
+            navigationOverlay.animate().alpha(0f).setDuration(180).withEndAction {
+                if (generation == navigationGeneration) {
+                    navigationOverlay.visibility = View.GONE
+                    navigationOverlay.alpha = 0f
+                }
+            }.start()
+        }, wait)
+    }
+
+    private fun navigateTo(message: String, action: () -> Unit) {
+        showNavigationLoading(message)
+        try { action() } finally { hideNavigationLoading() }
+    }
+
     private fun showAuth() {
         activeScreen = "auth"
         screenHost.removeAllViews()
         screenHost.setPadding(dp(22), dp(34), dp(22), dp(22))
-        screenHost.addView(TextView(this).apply {
-            text = "E"
-            textSize = 30f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = android.view.Gravity.CENTER
-            setTextColor(navy)
-            setBackgroundColor(gold)
-        }, LinearLayout.LayoutParams(dp(62), dp(62)))
+        screenHost.addView(ImageView(this).apply {
+            setImageResource(R.drawable.elogbook_logo)
+            contentDescription = "E-Logbook logo"
+        }, LinearLayout.LayoutParams(dp(70), dp(70)))
         screenHost.addView(label("E-LOGBOOK", 13f, gold).apply { setPadding(0, dp(24), 0, dp(4)) })
         screenHost.addView(label("Your attachment.\nYour progress.", 30f, navy, true).apply { setPadding(0, 0, 0, dp(10)) })
         screenHost.addView(label("Keep daily records organized, even when you are offline.", 15f, ink).apply { setPadding(0, 0, 0, dp(26)) })
@@ -234,6 +310,10 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
         }
+        top.addView(ImageView(this).apply {
+            setImageResource(R.drawable.elogbook_logo)
+            contentDescription = "E-Logbook logo"
+        }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(12) })
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("E-LOGBOOK", 12f, blue, true))
         titles.addView(label(when (currentRole) {
@@ -316,15 +396,19 @@ class MainActivity : ComponentActivity() {
         row.addView(textBox, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(label("›", 28f, blue, true))
         card.addView(row)
-        card.setOnClickListener { when (destination) {
-            "entry" -> showEntry()
-            "records" -> showRecords()
-            "weekly" -> showWeekly()
-            "performance" -> showStudentPerformance()
-            "reviews" -> showSupervisorReviews()
-            "organization" -> showOrganizationWorkspace()
-            "supervisorTools" -> showSupervisorTools()
-        } }
+        card.setOnClickListener {
+            navigateTo("Opening " + title + "…") {
+                when (destination) {
+                    "entry" -> showEntry()
+                    "records" -> showRecords()
+                    "weekly" -> showWeekly()
+                    "performance" -> showStudentPerformance()
+                    "reviews" -> showSupervisorReviews()
+                    "organization" -> showOrganizationWorkspace()
+                    "supervisorTools" -> showSupervisorTools()
+                }
+            }
+        }
         screenHost.addView(card, matchWrap())
     }
 
@@ -344,7 +428,9 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { saveEntry() }
         }, matchWrap())
         screenHost.addView(card, matchWrap())
-        screenHost.addView(actionButton("Back to saved records", navy).apply { setOnClickListener { showRecords() } }, matchWrap())
+        screenHost.addView(actionButton("Back to saved records", navy).apply {
+            setOnClickListener { navigateTo("Returning to saved records…") { showRecords() } }
+        }, matchWrap())
     }
 
     private fun showRecords() {
@@ -382,15 +468,48 @@ class MainActivity : ComponentActivity() {
                     details.addView(label(if (entry.syncStatus == "synced") "SYNCED" else "PENDING SYNC", 10f, if (entry.syncStatus == "synced") green else Color.rgb(174, 105, 20), true).apply { setPadding(0, dp(4), 0, 0) })
                     details.addView(label("Tap to view/edit", 10f, blue, true).apply { setPadding(0, dp(4), 0, 0) })
                     row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-                    row.setOnClickListener { showEntry(entry) }
+                    row.setOnClickListener { navigateTo("Opening saved record…") { showEntryDetails(entry) } }
                     row.isClickable = true
                     table.addView(row)
                     table.addView(View(this@MainActivity).apply { setBackgroundColor(Color.rgb(225, 230, 238)) }, LinearLayout.LayoutParams(-1, dp(1)))
                 }
             }
         }
-        screenHost.addView(actionButton("＋ New daily record", blue).apply { setOnClickListener { showEntry() } }, matchWrap())
-        screenHost.addView(actionButton("Back to dashboard", navy).apply { setOnClickListener { showHome() } }, matchWrap())
+        screenHost.addView(actionButton("＋ New daily record", blue).apply {
+            setOnClickListener { navigateTo("Opening new daily record…") { showEntry() } }
+        }, matchWrap())
+        screenHost.addView(actionButton("Back to dashboard", navy).apply {
+            setOnClickListener { navigateTo("Returning to dashboard…") { showHome() } }
+        }, matchWrap())
+    }
+
+    private fun showEntryDetails(entry: LogbookEntry) {
+        activeScreen = "entryDetails"
+        screenHost.removeAllViews()
+        addPageHeader("Saved daily record", "Review the saved information in a table. Choose Edit only when you want to change it.")
+        val detailCard = panel()
+        detailCard.addView(label("DAILY RECORD DETAILS", 12f, blue, true).apply { setPadding(0, 0, 0, dp(10)) })
+        val reviewStatus = if (!entry.supervisorReviewedAt.isNullOrBlank()) "Reviewed on " + entry.supervisorReviewedAt else "Awaiting supervisor review"
+        val rows = listOf(
+            listOf("Date", entry.entryDate),
+            listOf("Work done today", entry.workDone.ifBlank { "—" }),
+            listOf("Tools / equipment used", entry.toolsUsed.ifBlank { "—" }),
+            listOf("Skills or lessons learned", entry.skillsLearned.ifBlank { "—" }),
+            listOf("Challenges encountered", entry.challenges.ifBlank { "—" }),
+            listOf("Recommendations", entry.recommendations.ifBlank { "—" }),
+            listOf("Supervisor feedback", entry.supervisorComments.ifBlank { "No supervisor feedback yet" }),
+            listOf("Review status", reviewStatus),
+            listOf("Sync status", if (entry.syncStatus == "synced") "Synced to account" else "Saved on device • Pending sync"),
+            listOf("Last saved", SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(entry.updatedAt)))
+        )
+        addDataTable(detailCard, listOf("FIELD", "SAVED INFORMATION"), rows)
+        screenHost.addView(detailCard, matchWrap())
+        screenHost.addView(actionButton("Edit this record", blue).apply {
+            setOnClickListener { navigateTo("Opening record editor…") { showEntry(entry) } }
+        }, matchWrap())
+        screenHost.addView(actionButton("Back to saved records", navy).apply {
+            setOnClickListener { navigateTo("Returning to saved records…") { showRecords() } }
+        }, matchWrap())
     }
 
     private fun showWeekly(existing: WeeklySummary? = null) {
@@ -463,8 +582,12 @@ class MainActivity : ComponentActivity() {
         weeklyList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         saved.addView(weeklyList)
         screenHost.addView(saved, matchWrap())
-        screenHost.addView(actionButton("View saved daily records", blue).apply { setOnClickListener { showRecords() } }, matchWrap())
-        screenHost.addView(actionButton("Back to dashboard", navy).apply { setOnClickListener { showHome() } }, matchWrap())
+        screenHost.addView(actionButton("View saved daily records", blue).apply {
+            setOnClickListener { navigateTo("Opening saved records…") { showRecords() } }
+        }, matchWrap())
+        screenHost.addView(actionButton("Back to dashboard", navy).apply {
+            setOnClickListener { navigateTo("Returning to dashboard…") { showHome() } }
+        }, matchWrap())
         observeWeekly(currentSession?.userId ?: "local")
     }
 
@@ -690,10 +813,17 @@ class MainActivity : ComponentActivity() {
             screenHost.addView(label("Please sign in to view your performance.", 14f, ink))
             return
         }
-        val organizationId = profile.optString("organization_id")
-        val course = profile.optString("course")
-        if (organizationId.isBlank() || course.isBlank()) {
-            screenHost.addView(label("Complete your organisation and course details to see your course ranking.", 14f, ink))
+        val organizationId = profile.optString("organization_id").trim().takeUnless {
+            it.isBlank() || it.equals("null", ignoreCase = true) || it.equals("undefined", ignoreCase = true)
+        }
+        val course = profile.optString("course").trim().takeUnless {
+            it.isBlank() || it.equals("null", ignoreCase = true) || it.equals("undefined", ignoreCase = true)
+        }
+        if (organizationId == null || course == null) {
+            screenHost.addView(label(
+                "Your account is not linked to a valid organisation and course yet. Complete your profile registration or ask your organisation administrator to fix the link, then reopen Performance and rankings.",
+                14f, ink
+            ))
             return
         }
         val rankingCard = panel()
@@ -1058,7 +1188,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun addPageHeader(title: String, subtitle: String) {
-        screenHost.addView(actionButton("‹ Dashboard", navy).apply { setOnClickListener { showHome() } })
+        screenHost.addView(actionButton("‹ Dashboard", navy).apply {
+            setOnClickListener { navigateTo("Returning to dashboard…") { showHome() } }
+        })
         screenHost.addView(label(title, 25f, navy, true).apply { setPadding(0, dp(16), 0, dp(4)) })
         screenHost.addView(label(subtitle, 14f, ink).apply { setPadding(0, 0, 0, dp(16)) })
     }
@@ -1316,6 +1448,17 @@ class MainActivity : ComponentActivity() {
                 setColor(Color.WHITE)
                 setStroke(dp(1), Color.rgb(220, 226, 236))
                 cornerRadius = dp(10).toFloat()
+            }
+            field.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus && ::scrollContainer.isInitialized) {
+                    field.post {
+                        val visibleRect = android.graphics.Rect(0, 0, field.width, field.height)
+                        field.requestRectangleOnScreen(visibleRect, true)
+                        scrollContainer.postDelayed({
+                            if (field.hasFocus()) field.requestRectangleOnScreen(visibleRect, true)
+                        }, 220L)
+                    }
+                }
             }
             parent.addView(field, matchWrap())
         }
