@@ -435,6 +435,10 @@ class MainActivity : ComponentActivity() {
             if (existing == null) "Record what you worked on today." else "Update your saved entry. Changing report content clears its previous review.")
         val card = panel()
         dateField = addField(card, "Date (YYYY-MM-DD)", existing?.entryDate ?: SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()), false)
+        if (existing != null) {
+            dateField.isEnabled = false
+            dateField.alpha = 0.72f
+        }
         workField = addField(card, "Work done today *", existing?.workDone ?: "", true)
         toolsField = addField(card, "Tools / equipment used", existing?.toolsUsed ?: "", false)
         skillsField = addField(card, "Skills or lessons learned", existing?.skillsLearned ?: "", true)
@@ -537,6 +541,10 @@ class MainActivity : ComponentActivity() {
         form.addView(label("WEEKLY ACTIVITY SUMMARY", 12f, blue, true))
         form.addView(label("What did you accomplish this week?", 19f, navy, true).apply { setPadding(0, dp(8), 0, dp(4)) })
         val weekStart = addField(form, "Week starting (Monday, YYYY-MM-DD)", existing?.weekStart ?: mondayDate(), false)
+        if (existing != null) {
+            weekStart.isEnabled = false
+            weekStart.alpha = 0.72f
+        }
         val summaryField = addField(form, "Work completed this week *", existing?.summary ?: "", true)
         val skillsField = addField(form, "Skills or lessons learned", existing?.skillsLearned ?: "", true)
         val challengesField = addField(form, "Challenges and solutions", existing?.challenges ?: "", true)

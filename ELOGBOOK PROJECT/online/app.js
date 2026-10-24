@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const configured = window.ELOGBOOK_CONFIG && /^https:\/\//.test(window.ELOGBOOK_CONFIG.supabaseUrl) && window.ELOGBOOK_CONFIG.supabaseAnonKey && !window.ELOGBOOK_CONFIG.supabaseAnonKey.includes("PASTE_");
-  let client=null,currentUser=null,currentProfile=null,currentRole="student",organizationMembers=[],assignedStudents=[],selectedDailyEntry=null;
+  let client=null,currentUser=null,currentProfile=null,currentRole="student",organizationMembers=[],assignedStudents=[],selectedDailyEntry=null,editingDailyEntryId=null;
   let loaderGeneration=0,loaderHideTimer=null;
   const isUuid=value=>/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value||"").trim());
   function showNavigationLoader(message="Opening E-Logbook…"){
@@ -42,7 +42,8 @@
   async function fetchOrganizations(selected){if(!client)return;const {data,error}=await client.from("organizations").select("id,name").order("name");const select=$("regOrganizationId");select.replaceChildren();select.append(new Option("Choose organisation",""));if(error){select.append(new Option("Could not load organisations",""));return;}for(const org of data||[])select.append(new Option(org.name,org.id));if(selected)select.value=selected;}
   let passwordRecoveryMode=false;
   function showLogin(message="",email=""){
-    currentUser=null;currentProfile=null;currentRole="student";
+    currentUser=null;currentProfile=null;currentRole="student";editingDailyEntryId=null;
+    if($("saveDailyEntry"))$("saveDailyEntry").textContent="Save daily entry";
     $("appPanel").hidden=true;$("registrationPanel").hidden=true;$("resetPanel").hidden=true;
     $("authPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=false;
     if(email){$("email").value=email;$("regEmail").value=email;}
@@ -150,7 +151,33 @@
   $("refresh").addEventListener("click",loadEntries);$("refreshWeekly").addEventListener("click",loadWeekly);$("weeklyForm").addEventListener("submit",saveWeekly);$("refreshReviews").addEventListener("click",loadSupervisorWorkspace);
   $("toggleDailyTable").addEventListener("click",()=>{const el=$("entries");el.hidden=!el.hidden;$("toggleDailyTable").textContent=el.hidden?"View saved entries as table":"Hide saved entries table";});
   $("toggleWeeklyTable").addEventListener("click",()=>{const el=$("weeklyEntries");el.hidden=!el.hidden;$("toggleWeeklyTable").textContent=el.hidden?"View weekly reports as table":"Hide weekly reports table";});
-  $("entryForm").addEventListener("submit",async e=>{e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};if(!row.work_done)return say("entryMessage","Please describe the work done today.");say("entryMessage","Saving…");const {error}=await client.from("daily_entries").upsert(row,{onConflict:"student_id,entry_date"});if(error)return say("entryMessage","Could not save: "+error.message);say("entryMessage","Daily entry saved online.",true);["workDone","toolsUsed","skillsLearned","challenges","recommendations"].forEach(id=>$(id).value="");await loadEntries();});
+  $("entryForm").addEventListener("submit",async e=>{
+    e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;
+    const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),
+      tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),
+      challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),
+      client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    if(!row.work_done)return say("entryMessage","Please describe the work done today.");
+    const button=$("saveDailyEntry");button.disabled=true;say("entryMessage",editingDailyEntryId?"Updating saved entry…":"Saving daily entry…");
+    try{
+      if(editingDailyEntryId){
+        const {data,error}=await client.from("daily_entries").update(row)
+          .eq("id",editingDailyEntryId).eq("student_id",currentUser.id).select("id").maybeSingle();
+        if(error)throw error;
+        if(!data)throw new Error("The saved entry could not be found. Refresh saved records and select it again.");
+        editingDailyEntryId=null;button.textContent="Save daily entry";
+        say("entryMessage","Saved entry updated online.",true);
+      }else{
+        const {error}=await client.from("daily_entries").upsert(row,{onConflict:"student_id,entry_date"});
+        if(error)throw error;
+        say("entryMessage","Daily entry saved online.",true);
+      }
+      ["workDone","toolsUsed","skillsLearned","challenges","recommendations"].forEach(id=>$(id).value="");
+      $("entryDate").value=dateToday();
+      await loadEntries();
+    }catch(err){say("entryMessage","Could not save: "+(err.message||"Please try again."));}
+    finally{button.disabled=false;}
+  });
   async function saveWeekly(e){e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;const weekStart=$("weekStart").value,summary=$("weeklySummary").value.trim();if(!weekStart||!summary)return say("weeklyMessage","Choose the week starting date and enter your summary.");const {error}=await client.from("weekly_summaries").upsert({student_id:currentUser.id,week_start:weekStart,summary,skills_learned:$("weeklySkills").value.trim(),challenges:$("weeklyChallenges").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:"student_id,week_start"});if(error)return say("weeklyMessage","Could not save weekly summary: "+error.message);say("weeklyMessage","Weekly summary saved online.",true);["weeklySummary","weeklySkills","weeklyChallenges"].forEach(id=>$(id).value="");await loadWeekly();}
   async function showSession(){if(!client||passwordRecoveryMode)return;const {data:{session},error}=await client.auth.getSession();if(error)return say("authMessage",error.message);currentUser=session&&session.user||null;if(!currentUser){$("authPanel").hidden=false;$("appPanel").hidden=true;$("registrationPanel").hidden=true;$("resetPanel").hidden=true;return;}const {data:profile,error:profileError}=await client.from("profiles").select("id,full_name,role,organization_id,school_name,student_number,gender,course,approval_status").eq("id",currentUser.id).maybeSingle();if(profileError){say("authMessage","Could not load your profile: "+profileError.message);return;}currentProfile=profile;currentRole=profile?.role||"student";const needsOrganisation=!!profile&&!profile.organization_id&&profile.role==="student";if(!profile||needsOrganisation){$("authPanel").hidden=true;$("appPanel").hidden=true;$("registrationPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=true;$("cancelRegistration").hidden=true;fillRegistrationFromMetadata(currentUser.user_metadata||{});if(profile){if(!currentUser.user_metadata?.role)$("regRole").value="student";if(!$("regName").value)$("regName").value=profile.full_name||"";if(!$("regGender").value&&profile.gender)$("regGender").value=profile.gender;if(!$("regCourse").value&&profile.course)$("regCourse").value=profile.course;if(!$("regStudentNumber").value&&profile.student_number)$("regStudentNumber").value=profile.student_number;syncRoleFields();}say("registrationMessage",profile?"Your account exists but is not linked to an organisation yet. Complete these details to connect it.":"Finish your profile registration to open your workspace.");return;}$("authPanel").hidden=true;$("registrationPanel").hidden=true;$("appPanel").hidden=false;$("workspaceEyebrow").textContent=roleName(currentRole).toUpperCase()+" WORKSPACE";$("workspaceTitle").textContent=(profile.full_name||"Member")+"'s workspace";$("workspaceDescription").textContent=(profile.school_name||"Your organisation is linked")+(profile.course?" • "+profile.course:"");$("dailyCount").textContent="…";$("syncState").textContent=navigator.onLine?"Online":"Offline";const pending=currentRole!=="student"&&profile.approval_status!=="approved";$("pendingApprovalPanel").hidden=!pending;$("studentPanel").hidden=currentRole!=="student";$("supervisorPanel").hidden=pending||!["field_supervisor","institution_supervisor"].includes(currentRole);$("organizationPanel").hidden=currentRole!=="organization_admin";if(pending){$("pendingOrgName").textContent="Organisation: "+(profile.school_name||"linked organisation")+" • Status: "+profile.approval_status;return;}if(currentRole==="student"){await Promise.all([loadEntries(),loadWeekly(),loadStudentMarksAndRankings()]);}else if(currentRole==="organization_admin"){await loadOrganizationWorkspace();const savedKey=sessionStorage.getItem("elogbook-org-key-"+profile.organization_id);if(savedKey){$("orgKeyDisplay").hidden=false;$("orgKeyDisplay").textContent="Your organisation key: "+savedKey;$("copyOrgKey").hidden=false;}}else if(["field_supervisor","institution_supervisor"].includes(currentRole)){await loadSupervisorWorkspace();}}
   function openDailyRecord(record){
@@ -175,6 +202,8 @@
   }
   $("editDetailedEntry").addEventListener("click",()=>{
     const record=selectedDailyEntry;if(!record)return;
+    editingDailyEntryId=String(record.id);
+    $("saveDailyEntry").textContent="Update daily entry";
     $("entryDate").value=record.entry_date||"";$("workDone").value=record.work_done||"";
     $("toolsUsed").value=record.tools_used||"";$("skillsLearned").value=record.skills_learned||"";
     $("challenges").value=record.challenges||"";$("recommendations").value=record.recommendations||"";
