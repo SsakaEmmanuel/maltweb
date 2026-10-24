@@ -73,3 +73,16 @@ input,textarea,select{scroll-margin-top:92px;scroll-margin-bottom:34vh}
 #organizationDailyReports table,#organizationWeeklyReports table{min-width:1250px}
 
 .report-export-actions{margin-top:8px}
+
+
+/* Accessible inline password visibility control and keyboard-safe input positioning. */
+.password-input-wrap{display:flex;align-items:center;gap:0;width:100%;min-width:0;margin-top:7px;border:1px solid #cfd8e5;border-radius:10px;background:#fbfcfe;overflow:hidden;scroll-margin-top:100px;scroll-margin-bottom:42vh}
+.password-input-wrap:focus-within{border-color:#2868b2;box-shadow:0 0 0 3px #2868b21a}
+.password-input-wrap input{flex:1 1 auto;min-width:0;width:100%;margin:0;border:0;border-radius:0;background:transparent;box-shadow:none;outline:none}
+.password-input-wrap input:focus{border:0;box-shadow:none}
+.password-toggle{display:grid;place-items:center;flex:0 0 46px;width:46px;min-height:44px;padding:8px;background:transparent;color:#174b83;border-radius:0}
+.password-toggle:hover{background:#eaf0f7;filter:none}
+.password-toggle:focus-visible{outline:2px solid #2868b2;outline-offset:-3px}
+.password-toggle svg{display:block;width:21px;height:21px}
+html{scroll-padding-bottom:42vh}
+input,textarea,select{scroll-margin-bottom:42vh}
