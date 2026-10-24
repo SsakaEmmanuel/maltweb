@@ -40,26 +40,118 @@
   const addCell=(row,value,header)=>{const cell=document.createElement(header?"th":"td");cell.textContent=value==null?"":String(value);row.append(cell);return cell;};
   function makeTable(headers,rows){const wrap=el("div",undefined,"table-wrap");if(!rows.length){wrap.append(el("p","No records to display yet.","muted"));return wrap;}const table=el("table");const thead=el("thead");const hr=el("tr");headers.forEach(h=>addCell(hr,h,true));thead.append(hr);table.append(thead);const tbody=el("tbody");rows.forEach(values=>{const tr=el("tr");values.forEach(v=>{const td=el("td");if(v instanceof Node)td.append(v);else td.textContent=v==null?"":String(v);tr.append(td);});tbody.append(tr);});table.append(tbody);wrap.append(table);return wrap;}
   async function fetchOrganizations(selected){if(!client)return;const {data,error}=await client.from("organizations").select("id,name").order("name");const select=$("regOrganizationId");select.replaceChildren();select.append(new Option("Choose organisation",""));if(error){select.append(new Option("Could not load organisations",""));return;}for(const org of data||[])select.append(new Option(org.name,org.id));if(selected)select.value=selected;}
-  function syncRoleFields(){const r=$("regRole").value;const org=r==="organization_admin";const student=r==="student";$("regOrganizationNameWrap").hidden=!org;$("regMemberOrganizationWrap").hidden=org;$("regStudentNumberWrap").hidden=!student;$("regCourseWrap").hidden=org;$("regStudentNumber").required=student;$("regCourse").required=!org;$("regOrganizationName").required=org;$("regOrganizationId").required=!org;$("regOrganizationKey").required=!org;$("registrationTitle").textContent=org?"Register an organisation":r==="student"?"Create student account":"Create supervisor account";$("registrationIntro").textContent=org?"Register your school or institution first. A unique organisation key will be generated once and shown to you.":r==="student"?"Enter your course, student/index number and organisation details.":"Enter your course or subject and organisation key. Your organisation must approve your supervisor account before you can review reports."; }
+  let passwordRecoveryMode=false;
+  function showLogin(message="",email=""){
+    currentUser=null;currentProfile=null;currentRole="student";
+    $("appPanel").hidden=true;$("registrationPanel").hidden=true;$("resetPanel").hidden=true;
+    $("authPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=false;
+    if(email){$("email").value=email;$("regEmail").value=email;}
+    if(message)say("authMessage",message,true);
+  }
+  function showRegistration(){
+    $("authPanel").hidden=true;$("resetPanel").hidden=true;$("registrationPanel").hidden=false;
+    $("registrationForm").hidden=false;$("registrationCredentials").hidden=false;
+    $("regEmail").value=$("email").value;$("regPassword").value=$("password").value;
+    fetchOrganizations();syncRoleFields();
+  }
+  function syncRoleFields(){const r=$("regRole").value;const org=r==="organization_admin";const student=r==="student";const supervisor=["field_supervisor","institution_supervisor"].includes(r);$("regOrganizationNameWrap").hidden=!org;$("regMemberOrganizationWrap").hidden=org;$("regStudentNumberWrap").hidden=!student;$("regCourseWrap").hidden=org;$("regOrganizationKeyWrap").hidden=!supervisor;$("regStudentNumber").required=student;$("regCourse").required=!org;$("regOrganizationName").required=org;$("regOrganizationId").required=!org;$("regOrganizationKey").required=supervisor;$("registrationTitle").textContent=org?"Register an organisation":student?"Create student account":"Create supervisor account";$("registrationIntro").textContent=org?"Register your school or institution. It will appear in the organisation selector after successful registration. Save the generated organisation key from your workspace for supervisors.":student?"Enter your academic details and choose your organisation. Students do not need an organisation key.":"Enter your course or subject, choose your organisation and enter the key supplied by that organisation. Supervisor accounts require approval."}
   function fillRegistrationFromMetadata(meta){if(!meta)return;if(meta.full_name)$("regName").value=meta.full_name;if(meta.role&&["student","field_supervisor","institution_supervisor","organization_admin"].includes(meta.role))$("regRole").value=meta.role;if(meta.gender)$("regGender").value=meta.gender;if(meta.course)$("regCourse").value=meta.course;if(meta.student_number)$("regStudentNumber").value=meta.student_number;if(meta.organization_name)$("regOrganizationName").value=meta.organization_name;syncRoleFields();fetchOrganizations(meta.organization_id);}
   $("regRole").addEventListener("change",syncRoleFields);
-  $("showCreate").addEventListener("click",async()=>{await fetchOrganizations();$("authPanel").hidden=true;$("registrationPanel").hidden=false;$("registrationCredentials").hidden=false;$("cancelRegistration").hidden=false;$("regEmail").value=$("email").value;$("regPassword").value=$("password").value;syncRoleFields();});
-  $("cancelRegistration").addEventListener("click",()=>{if(currentUser){showSession();return;}$("registrationPanel").hidden=true;$("authPanel").hidden=false;});
-  $("authForm").addEventListener("submit",async e=>{e.preventDefault();if(!client)return;$("signIn").disabled=true;say("authMessage","Signing in…");try{const {error}=await client.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(error)throw error;await showSession();}catch(err){say("authMessage",err.message||"Sign-in failed.");}finally{$("signIn").disabled=false;}});
-  $("registrationForm").addEventListener("submit",async e=>{e.preventDefault();if(!client)return;const draft={full_name:$("regName").value.trim(),role:$("regRole").value,gender:$("regGender").value,course:$("regCourse").value.trim(),student_number:$("regStudentNumber").value.trim(),organization_id:$("regOrganizationId").value,organization_key:$("regOrganizationKey").value.trim(),organization_name:$("regOrganizationName").value.trim()};if(!draft.full_name||!draft.gender)return say("registrationMessage","Enter your full name and choose a gender.");if(draft.role==="organization_admin"&&!draft.organization_name)return say("registrationMessage","Enter the organisation name.");if(draft.role!=="organization_admin"&&(!draft.organization_id||!draft.organization_key))return say("registrationMessage","Choose your organisation and enter its organisation key.");if(draft.role==="student"&&!draft.student_number)return say("registrationMessage","Enter your student/index number.");if(["field_supervisor","institution_supervisor"].includes(draft.role)&&!draft.course)return say("registrationMessage","Enter the course or subject you supervise.");
-    const btn=$("submitRegistration");btn.disabled=true;say("registrationMessage",currentUser?"Completing registration…":"Creating account…");
-    try{if(!currentUser){const email=$("regEmail").value.trim(),password=$("regPassword").value;if(!email||password.length<6)throw new Error("Enter a valid email and password of at least 6 characters.");const metadata={full_name:draft.full_name,role:draft.role,gender:draft.gender,course:draft.course,student_number:draft.student_number,organization_id:draft.organization_id||null,organization_name:draft.organization_name};const {data,error}=await client.auth.signUp({email,password,options:{data:metadata,emailRedirectTo:window.location.origin+window.location.pathname}});if(error)throw error;if(!data.session){say("registrationMessage","Account created. Confirm your email, then sign in. Your details are saved; re-enter the organisation key if prompted.",true);$("registrationCredentials").hidden=true;return;}currentUser=data.user;}await completeRegistration(draft);}catch(err){say("registrationMessage",err.message||"Registration failed.");}finally{btn.disabled=false;}
+  $("showCreate").addEventListener("click",showRegistration);
+  $("cancelRegistration").addEventListener("click",()=>showLogin());
+  $("showLoginFromRegistration").addEventListener("click",()=>showLogin());
+  $("forgotPassword").addEventListener("click",()=>{
+    $("authPanel").hidden=true;$("registrationPanel").hidden=true;$("resetPanel").hidden=false;
+    $("resetRequestForm").hidden=false;$("newPasswordForm").hidden=true;$("resetEmail").value=$("email").value;
+    say("resetMessage","Enter the email address linked to your account.");
   });
-  async function completeRegistration(d){if(!currentUser)throw new Error("Sign in before completing registration.");if(d.role==="organization_admin"){const {data,error}=await client.rpc("create_logbook_organization",{p_full_name:d.full_name,p_organization_name:d.organization_name,p_gender:d.gender});if(error)throw error;const item=Array.isArray(data)?data[0]:data;if(!item||!item.organization_key)throw new Error("Organisation created, but the key could not be returned. Contact support before sharing access.");sessionStorage.setItem("elogbook-org-key-"+item.organization_id,item.organization_key);say("registrationMessage","Organisation created successfully. The organisation key is available in your workspace. Save it before inviting members.",true);$("registrationPanel").hidden=true;$("registrationForm").hidden=false;$("registrationCredentials").hidden=false;await showSession();$("orgKeyDisplay").hidden=false;$("orgKeyDisplay").textContent="Your new organisation key: "+item.organization_key;$("copyOrgKey").hidden=false;return;}
-    const {error}=await client.rpc("register_logbook_member",{p_full_name:d.full_name,p_role:d.role,p_gender:d.gender,p_course:d.course||null,p_student_number:d.student_number||null,p_organization_id:d.organization_id,p_organization_key:d.organization_key});if(error)throw error;await showSession();
+  $("backToLoginFromReset").addEventListener("click",()=>showLogin());
+  $("resetRequestForm").addEventListener("submit",async e=>{
+    e.preventDefault();if(!client)return;
+    const email=$("resetEmail").value.trim(),btn=$("sendResetEmail");btn.disabled=true;
+    try{const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:window.location.href.split("#")[0]});if(error)throw error;
+      say("resetMessage","If an account exists for that address, a password reset link has been sent. Check your inbox and spam folder.",true);
+    }catch(err){say("resetMessage",err.message||"Could not request a password reset.");}
+    finally{btn.disabled=false;}
+  });
+  $("newPasswordForm").addEventListener("submit",async e=>{
+    e.preventDefault();if(!client)return;
+    const password=$("newPassword").value,confirm=$("confirmNewPassword").value;
+    if(password.length<6)return say("newPasswordMessage","Use at least 6 characters.");
+    if(password!==confirm)return say("newPasswordMessage","The passwords do not match.");
+    const btn=$("saveNewPassword");btn.disabled=true;
+    try{const {error}=await client.auth.updateUser({password});if(error)throw error;
+      passwordRecoveryMode=false;await client.auth.signOut();$("newPasswordForm").hidden=true;
+      showLogin("Password updated. You can now sign in with your new password.",$("resetEmail").value);
+    }catch(err){say("newPasswordMessage",err.message||"Could not update the password.");}
+    finally{btn.disabled=false;}
+  });
+  client?.auth.onAuthStateChange(event=>{
+    if(event==="PASSWORD_RECOVERY"){
+      passwordRecoveryMode=true;$("authPanel").hidden=true;$("registrationPanel").hidden=true;$("appPanel").hidden=true;
+      $("resetPanel").hidden=false;$("resetRequestForm").hidden=true;$("newPasswordForm").hidden=false;
+      say("resetMessage","Choose a new password for your account.");
+    }
+  });
+  $("authForm").addEventListener("submit",async e=>{e.preventDefault();if(!client)return;$("signIn").disabled=true;say("authMessage","Signing in…");try{const {error}=await client.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});if(error)throw error;await showSession();}catch(err){say("authMessage",err.message||"Sign-in failed.");}finally{$("signIn").disabled=false;}});
+  $("registrationForm").addEventListener("submit",async e=>{
+    e.preventDefault();if(!client)return;
+    const draft={full_name:$("regName").value.trim(),role:$("regRole").value,gender:$("regGender").value,
+      course:$("regCourse").value.trim(),student_number:$("regStudentNumber").value.trim(),
+      organization_id:$("regOrganizationId").value,organization_key:$("regOrganizationKey").value.trim(),
+      organization_name:$("regOrganizationName").value.trim()};
+    if(!draft.full_name||!draft.gender)return say("registrationMessage","Enter your full name and choose a gender.");
+    if(draft.role==="organization_admin"&&!draft.organization_name)return say("registrationMessage","Enter the organisation name.");
+    if(draft.role!=="organization_admin"&&!draft.organization_id)return say("registrationMessage","Choose your organisation.");
+    if(["field_supervisor","institution_supervisor"].includes(draft.role)&&!draft.organization_key)return say("registrationMessage","Enter the organisation key provided by your organisation.");
+    if(draft.role==="student"&&!draft.student_number)return say("registrationMessage","Enter your student/index number.");
+    if(draft.role!=="organization_admin"&&!draft.course)return say("registrationMessage","Enter your course or subject.");
+    const btn=$("submitRegistration");btn.disabled=true;say("registrationMessage",currentUser?"Completing registration…":"Creating account…");
+    try{
+      if(!currentUser){
+        const email=$("regEmail").value.trim(),password=$("regPassword").value;
+        if(!email||password.length<6)throw new Error("Enter a valid email and password of at least 6 characters.");
+        const metadata={full_name:draft.full_name,role:draft.role,gender:draft.gender,course:draft.course,
+          student_number:draft.student_number,organization_id:draft.organization_id||null,organization_name:draft.organization_name};
+        const {data,error}=await client.auth.signUp({email,password,options:{data:metadata,emailRedirectTo:window.location.origin+window.location.pathname}});
+        if(error)throw error;
+        if(!data.session){showLogin("Account created. Check your email to confirm it, then sign in to finish registration.",email);return;}
+        currentUser=data.user;
+      }
+      await completeRegistration(draft);
+    }catch(err){say("registrationMessage",err.message||"Registration failed.");}
+    finally{btn.disabled=false;}
+  });
+  async function completeRegistration(d){
+    if(!currentUser)throw new Error("Sign in before completing registration.");
+    if(d.role==="organization_admin"){
+      const {data,error}=await client.rpc("create_logbook_organization",{p_full_name:d.full_name,p_organization_name:d.organization_name,p_gender:d.gender});
+      if(error)throw error;
+      const item=Array.isArray(data)?data[0]:data;
+      if(!item||!item.organization_key)throw new Error("Organisation created, but the key could not be returned. Contact support before sharing access.");
+      sessionStorage.setItem("elogbook-org-key-"+item.organization_id,item.organization_key);
+      const email=currentUser.email||$("regEmail").value.trim()||$("email").value.trim();
+      await client.auth.signOut();
+      showLogin("Organisation registered successfully. Sign in to open its workspace and retrieve the generated organisation key.",email);
+      return;
+    }
+    const {error}=await client.rpc("register_logbook_member",{
+      p_full_name:d.full_name,p_role:d.role,p_gender:d.gender,p_course:d.course||null,
+      p_student_number:d.student_number||null,p_organization_id:d.organization_id,
+      p_organization_key:d.role==="student"?"":d.organization_key
+    });
+    if(error)throw error;
+    const email=currentUser.email||$("regEmail").value.trim()||$("email").value.trim();
+    await client.auth.signOut();
+    showLogin(d.role==="student"?"Student registration completed. You can now sign in.":"Supervisor registration submitted. Sign in after registration; your organisation must approve the account.",email);
   }
-  $("signOut").addEventListener("click",async()=>{if(client)await client.auth.signOut();currentUser=null;currentProfile=null;$("appPanel").hidden=true;$("registrationPanel").hidden=true;$("authPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=false;$("registrationMessage").textContent="";});
+  $("signOut").addEventListener("click",async()=>{if(client)await client.auth.signOut();passwordRecoveryMode=false;currentUser=null;currentProfile=null;$("appPanel").hidden=true;$("registrationPanel").hidden=true;$("resetPanel").hidden=true;$("authPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=false;$("registrationMessage").textContent="";});
   $("refresh").addEventListener("click",loadEntries);$("refreshWeekly").addEventListener("click",loadWeekly);$("weeklyForm").addEventListener("submit",saveWeekly);$("refreshReviews").addEventListener("click",loadSupervisorWorkspace);
   $("toggleDailyTable").addEventListener("click",()=>{const el=$("entries");el.hidden=!el.hidden;$("toggleDailyTable").textContent=el.hidden?"View saved entries as table":"Hide saved entries table";});
   $("toggleWeeklyTable").addEventListener("click",()=>{const el=$("weeklyEntries");el.hidden=!el.hidden;$("toggleWeeklyTable").textContent=el.hidden?"View weekly reports as table":"Hide weekly reports table";});
   $("entryForm").addEventListener("submit",async e=>{e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;const row={student_id:currentUser.id,entry_date:$("entryDate").value,work_done:$("workDone").value.trim(),tools_used:$("toolsUsed").value.trim(),skills_learned:$("skillsLearned").value.trim(),challenges:$("challenges").value.trim(),recommendations:$("recommendations").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()};if(!row.work_done)return say("entryMessage","Please describe the work done today.");say("entryMessage","Saving…");const {error}=await client.from("daily_entries").upsert(row,{onConflict:"student_id,entry_date"});if(error)return say("entryMessage","Could not save: "+error.message);say("entryMessage","Daily entry saved online.",true);["workDone","toolsUsed","skillsLearned","challenges","recommendations"].forEach(id=>$(id).value="");await loadEntries();});
   async function saveWeekly(e){e.preventDefault();if(!client||!currentUser||currentRole!=="student")return;const weekStart=$("weekStart").value,summary=$("weeklySummary").value.trim();if(!weekStart||!summary)return say("weeklyMessage","Choose the week starting date and enter your summary.");const {error}=await client.from("weekly_summaries").upsert({student_id:currentUser.id,week_start:weekStart,summary,skills_learned:$("weeklySkills").value.trim(),challenges:$("weeklyChallenges").value.trim(),client_updated_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:"student_id,week_start"});if(error)return say("weeklyMessage","Could not save weekly summary: "+error.message);say("weeklyMessage","Weekly summary saved online.",true);["weeklySummary","weeklySkills","weeklyChallenges"].forEach(id=>$(id).value="");await loadWeekly();}
-  async function showSession(){if(!client)return;const {data:{session},error}=await client.auth.getSession();if(error)return say("authMessage",error.message);currentUser=session&&session.user||null;if(!currentUser){$("authPanel").hidden=false;$("appPanel").hidden=true;$("registrationPanel").hidden=true;return;}const {data:profile,error:profileError}=await client.from("profiles").select("id,full_name,role,organization_id,school_name,student_number,gender,course,approval_status").eq("id",currentUser.id).maybeSingle();if(profileError){say("authMessage","Could not load your profile: "+profileError.message);return;}currentProfile=profile;currentRole=profile?.role||"student";const needsOrganisation=!!profile&&!profile.organization_id&&profile.role==="student";if(!profile||needsOrganisation){$("authPanel").hidden=true;$("appPanel").hidden=true;$("registrationPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=true;$("cancelRegistration").hidden=true;fillRegistrationFromMetadata(currentUser.user_metadata||{});if(profile){if(!currentUser.user_metadata?.role)$("regRole").value="student";if(!$("regName").value)$("regName").value=profile.full_name||"";if(!$("regGender").value&&profile.gender)$("regGender").value=profile.gender;if(!$("regCourse").value&&profile.course)$("regCourse").value=profile.course;if(!$("regStudentNumber").value&&profile.student_number)$("regStudentNumber").value=profile.student_number;syncRoleFields();}say("registrationMessage",profile?"Your account exists but is not linked to an organisation yet. Complete these details to connect it.":"Finish your profile registration to open your workspace.");return;}$("authPanel").hidden=true;$("registrationPanel").hidden=true;$("appPanel").hidden=false;$("workspaceEyebrow").textContent=roleName(currentRole).toUpperCase()+" WORKSPACE";$("workspaceTitle").textContent=(profile.full_name||"Member")+"'s workspace";$("workspaceDescription").textContent=(profile.school_name||"Your organisation is linked")+(profile.course?" • "+profile.course:"");$("dailyCount").textContent="…";$("syncState").textContent=navigator.onLine?"Online":"Offline";const pending=currentRole!=="student"&&profile.approval_status!=="approved";$("pendingApprovalPanel").hidden=!pending;$("studentPanel").hidden=currentRole!=="student";$("supervisorPanel").hidden=pending||!["field_supervisor","institution_supervisor"].includes(currentRole);$("organizationPanel").hidden=currentRole!=="organization_admin";if(pending){$("pendingOrgName").textContent="Organisation: "+(profile.school_name||"linked organisation")+" • Status: "+profile.approval_status;return;}if(currentRole==="student"){await Promise.all([loadEntries(),loadWeekly(),loadStudentMarksAndRankings()]);}else if(currentRole==="organization_admin"){await loadOrganizationWorkspace();}else if(["field_supervisor","institution_supervisor"].includes(currentRole)){await loadSupervisorWorkspace();}}
+  async function showSession(){if(!client||passwordRecoveryMode)return;const {data:{session},error}=await client.auth.getSession();if(error)return say("authMessage",error.message);currentUser=session&&session.user||null;if(!currentUser){$("authPanel").hidden=false;$("appPanel").hidden=true;$("registrationPanel").hidden=true;$("resetPanel").hidden=true;return;}const {data:profile,error:profileError}=await client.from("profiles").select("id,full_name,role,organization_id,school_name,student_number,gender,course,approval_status").eq("id",currentUser.id).maybeSingle();if(profileError){say("authMessage","Could not load your profile: "+profileError.message);return;}currentProfile=profile;currentRole=profile?.role||"student";const needsOrganisation=!!profile&&!profile.organization_id&&profile.role==="student";if(!profile||needsOrganisation){$("authPanel").hidden=true;$("appPanel").hidden=true;$("registrationPanel").hidden=false;$("registrationForm").hidden=false;$("registrationCredentials").hidden=true;$("cancelRegistration").hidden=true;fillRegistrationFromMetadata(currentUser.user_metadata||{});if(profile){if(!currentUser.user_metadata?.role)$("regRole").value="student";if(!$("regName").value)$("regName").value=profile.full_name||"";if(!$("regGender").value&&profile.gender)$("regGender").value=profile.gender;if(!$("regCourse").value&&profile.course)$("regCourse").value=profile.course;if(!$("regStudentNumber").value&&profile.student_number)$("regStudentNumber").value=profile.student_number;syncRoleFields();}say("registrationMessage",profile?"Your account exists but is not linked to an organisation yet. Complete these details to connect it.":"Finish your profile registration to open your workspace.");return;}$("authPanel").hidden=true;$("registrationPanel").hidden=true;$("appPanel").hidden=false;$("workspaceEyebrow").textContent=roleName(currentRole).toUpperCase()+" WORKSPACE";$("workspaceTitle").textContent=(profile.full_name||"Member")+"'s workspace";$("workspaceDescription").textContent=(profile.school_name||"Your organisation is linked")+(profile.course?" • "+profile.course:"");$("dailyCount").textContent="…";$("syncState").textContent=navigator.onLine?"Online":"Offline";const pending=currentRole!=="student"&&profile.approval_status!=="approved";$("pendingApprovalPanel").hidden=!pending;$("studentPanel").hidden=currentRole!=="student";$("supervisorPanel").hidden=pending||!["field_supervisor","institution_supervisor"].includes(currentRole);$("organizationPanel").hidden=currentRole!=="organization_admin";if(pending){$("pendingOrgName").textContent="Organisation: "+(profile.school_name||"linked organisation")+" • Status: "+profile.approval_status;return;}if(currentRole==="student"){await Promise.all([loadEntries(),loadWeekly(),loadStudentMarksAndRankings()]);}else if(currentRole==="organization_admin"){await loadOrganizationWorkspace();const savedKey=sessionStorage.getItem("elogbook-org-key-"+profile.organization_id);if(savedKey){$("orgKeyDisplay").hidden=false;$("orgKeyDisplay").textContent="Your organisation key: "+savedKey;$("copyOrgKey").hidden=false;}}else if(["field_supervisor","institution_supervisor"].includes(currentRole)){await loadSupervisorWorkspace();}}
   function openDailyRecord(record){
     selectedDailyEntry=record;
     $("entryDetailTitle").textContent="Daily record • "+(record.entry_date||"");

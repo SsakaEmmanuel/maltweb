@@ -41,3 +41,9 @@ input,textarea,select{scroll-margin-top:92px;scroll-margin-bottom:34vh}
 @keyframes elog-logo-float{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-3px) scale(1.035)}}
 @media(max-height:650px){.panel{padding:16px}main{margin-top:12px}.auth{margin:10px auto}label{margin:10px 0}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.loader-logo,.loader-spinner{animation-duration:2.5s}.navigation-loader{transition:none}}
+
+.auth-links{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px;color:#65748a;font-size:12px}
+.text-button{padding:4px 0;background:transparent;color:#174b83;text-decoration:underline;font-size:13px}
+#resetPanel{max-width:610px}
+#registrationPanel .actions button{flex:1 1 180px}
+@media(max-width:600px){.auth-links{align-items:flex-start;flex-direction:column}}

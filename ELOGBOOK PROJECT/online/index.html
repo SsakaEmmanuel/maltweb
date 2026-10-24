@@ -26,9 +26,21 @@
   <form id="authForm">
     <label>Email address<input id="email" type="email" autocomplete="email" required></label>
     <label>Password<input id="password" type="password" autocomplete="current-password" minlength="6" required></label>
-    <div class="actions"><button type="submit" id="signIn">Sign in</button><button type="button" class="secondary" id="showCreate">Create an account</button></div>
+    <div class="actions"><button type="submit" id="signIn">Sign in</button><button type="button" class="secondary" id="showCreate">Register new account</button></div>
   </form>
+  <div class="auth-links"><button type="button" class="text-button" id="forgotPassword">Forgot password?</button><span>New to E-Logbook? Register a new account.</span></div>
   <p id="authMessage" class="message" role="status"></p>
+</section>
+<section id="resetPanel" class="panel auth" hidden>
+  <p class="eyebrow">ACCOUNT RECOVERY</p><h1>Reset your password</h1><p class="muted">We will email you a secure link to reset your password.</p>
+  <form id="resetRequestForm"><label>Email address<input id="resetEmail" type="email" autocomplete="email" required></label>
+    <div class="actions"><button type="submit" id="sendResetEmail">Send reset link</button><button type="button" class="secondary" id="backToLoginFromReset">Back to sign in</button></div>
+  </form>
+  <form id="newPasswordForm" hidden><label>New password<input id="newPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+    <label>Confirm new password<input id="confirmNewPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+    <div class="actions"><button type="submit" id="saveNewPassword">Save new password</button></div><p id="newPasswordMessage" class="message" role="status"></p>
+  </form>
+  <p id="resetMessage" class="message" role="status"></p>
 </section>
 
 <section id="registrationPanel" class="panel auth" hidden>
@@ -54,14 +66,14 @@
       <label>Organisation
         <select id="regOrganizationId"><option value="">Loading organisations…</option></select>
       </label>
-      <label>Organisation key<input id="regOrganizationKey" autocomplete="off" maxlength="80" placeholder="Provided by your organisation"></label>
-      <p class="muted small">Your organisation must already be registered. Supervisors remain pending until the organisation approves them.</p>
+      <div id="regOrganizationKeyWrap"><label>Organisation key<input id="regOrganizationKey" autocomplete="off" maxlength="80" placeholder="Provided by your organisation"></label></div>
+      <p class="muted small">Students do not need an organisation key. Supervisors must use the key provided by their organisation and remain pending until approved.</p>
     </div>
     <div id="registrationCredentials">
       <label>Account email<input id="regEmail" type="email" autocomplete="email" required></label>
       <label>Password (at least 6 characters)<input id="regPassword" type="password" minlength="6" autocomplete="new-password" required></label>
     </div>
-    <div class="actions"><button id="submitRegistration" type="submit">Create account</button></div>
+    <div class="actions"><button id="submitRegistration" type="submit">Create account</button><button id="showLoginFromRegistration" type="button" class="secondary">Already have an account? Sign in</button></div>
   </form>
   <p id="registrationMessage" class="message" role="status"></p>
 </section>
