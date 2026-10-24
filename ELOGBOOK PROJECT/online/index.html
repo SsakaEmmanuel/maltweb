@@ -99,7 +99,10 @@
       <label>Challenges and solutions<textarea id="weeklyChallenges" rows="3" maxlength="4000"></textarea></label>
       <div class="actions"><button type="submit">Save weekly summary</button><button type="button" id="refreshWeekly" class="secondary">Refresh summaries</button><button type="button" class="secondary" id="toggleWeeklyTable">View weekly reports as table</button></div>
     </form><p id="weeklyMessage" class="message" role="status"></p></section>
-    <section class="panel"><div class="section-head"><h2>My saved records</h2><span class="muted">Entries, feedback and review status</span></div><div id="entries" class="table-host"></div><div id="weeklyEntries" class="table-host"></div></section>
+    <section class="panel"><div class="section-head"><h2>My saved records</h2><span class="muted">Entries, feedback and review status</span></div>
+      <div class="two report-shortcuts report-export-actions"><button type="button" class="secondary" id="downloadStudentDailyPdf">Download / Print Daily PDF</button><button type="button" class="secondary" id="downloadStudentWeeklyPdf">Download / Print Weekly PDF</button></div>
+      <p id="studentReportsMessage" class="message" role="status"></p>
+      <div id="entries" class="table-host"></div><div id="weeklyEntries" class="table-host"></div></section>
     <section id="entryDetailPanel" class="panel record-detail-panel" hidden>
       <p class="eyebrow">SAVED RECORD</p><h2 id="entryDetailTitle">Daily record details</h2>
       <p class="muted">All saved fields and supervisor feedback are displayed below. Use Edit when you intentionally want to change the record.</p>
@@ -112,7 +115,11 @@
 
   <section id="supervisorPanel" hidden>
     <section class="panel"><div class="section-head"><div><p class="eyebrow">SUPERVISOR WORKSPACE</p><h2>Assigned student reporting</h2></div><button type="button" class="secondary" id="refreshReviews">Refresh</button></div>
-      <p class="muted">Review student submissions without changing their original report text.</p><p id="reviewMessage" class="message" role="status"></p><div id="reviewQueue" class="table-host"></div>
+      <p class="muted">Review student submissions without changing their original report text.</p>
+      <div class="two report-shortcuts report-export-actions"><button type="button" class="secondary" id="downloadSupervisorDailyPdf">Download / Print Daily PDF</button><button type="button" class="secondary" id="downloadSupervisorWeeklyPdf">Download / Print Weekly PDF</button></div>
+      <p id="supervisorReportsMessage" class="message" role="status"></p>
+      <div id="supervisorDailyPdfTable" class="table-host" hidden></div><div id="supervisorWeeklyPdfTable" class="table-host" hidden></div>
+      <p id="reviewMessage" class="message" role="status"></p><div id="reviewQueue" class="table-host"></div>
     </section>
     <section class="panel"><h2>Attendance</h2><p class="muted">Record attendance for students assigned to you.</p><div class="two"><label>Student<select id="attendanceStudent"></select></label><label>Date<input id="attendanceDate" type="date"></label></div><label>Status<select id="attendanceStatus"><option value="present">Present</option><option value="late">Late</option><option value="absent">Absent</option><option value="excused">Excused</option></select></label><label>Remarks<textarea id="attendanceRemarks" rows="2"></textarea></label><button type="button" id="saveAttendance">Save attendance</button><p id="attendanceMessage" class="message" role="status"></p>
     </section>
