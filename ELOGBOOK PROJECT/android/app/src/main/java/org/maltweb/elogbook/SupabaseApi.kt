@@ -11,6 +11,11 @@ import java.util.concurrent.TimeUnit
 internal class SupabaseApi(private val context: Context) {
     private val sessions = SessionStore(context)
 
+    fun resetPassword(email: String) {
+        val redirect = android.net.Uri.encode("https://ssakaemmanuel.github.io/maltweb/ELOGBOOK%20PROJECT/online/index.html")
+        request("POST", "/auth/v1/recover?redirect_to=$redirect", JSONObject().put("email", email))
+    }
+
     fun signUp(email: String, password: String, metadata: JSONObject? = null): JSONObject {
         val body = JSONObject().put("email", email).put("password", password)
         if (metadata != null) body.put("data", metadata)

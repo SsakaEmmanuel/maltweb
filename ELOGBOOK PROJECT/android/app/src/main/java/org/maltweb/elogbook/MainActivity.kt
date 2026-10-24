@@ -42,6 +42,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var registrationGender: Spinner
     private lateinit var registrationOrganization: Spinner
     private lateinit var registrationAction: Button
+    private lateinit var signInButton: Button
+    private lateinit var forgotPasswordButton: Button
+    private lateinit var switchToLoginButton: Button
     private var organizations: JSONArray = JSONArray()
     private var currentProfile: JSONObject? = null
     private lateinit var dateField: EditText
@@ -215,9 +218,11 @@ class MainActivity : ComponentActivity() {
         emailField.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
         passwordField = addField(card, "Password", "", false)
         passwordField.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-        val signInButton = actionButton("Sign in", blue)
+        signInButton = actionButton("Sign in", blue)
         signInButton.setOnClickListener { signIn() }
         card.addView(signInButton, matchWrap())
+        forgotPasswordButton = actionButton("Forgot password?", navy).apply { setOnClickListener { requestPasswordReset() } }
+        card.addView(forgotPasswordButton, matchWrap())
         registrationFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         registrationRole = Spinner(this)
         registrationRole.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
@@ -242,16 +247,24 @@ class MainActivity : ComponentActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { updateRegistrationVisibility() }
         }
         card.addView(registrationFields, matchWrap())
-        registrationAction = actionButton("Create account", navy)
+        registrationAction = actionButton("Register new account", navy)
         registrationAction.setOnClickListener {
             if (registrationFields.visibility != View.VISIBLE) {
                 registrationFields.visibility = View.VISIBLE
-                registrationAction.text = if (currentSession == null) "Register selected account" else "Complete registration"
+                registrationAction.text = if (currentSession == null) "Create account" else "Complete registration"
+                signInButton.visibility = View.GONE
+                forgotPasswordButton.visibility = View.GONE
+                switchToLoginButton.visibility = View.VISIBLE
                 loadOrganizations()
                 updateRegistrationVisibility()
             } else signUp()
         }
         card.addView(registrationAction, matchWrap())
+        switchToLoginButton = actionButton("Already have an account? Sign in", navy).apply {
+            visibility = View.GONE
+            setOnClickListener { showAuth() }
+        }
+        card.addView(switchToLoginButton, matchWrap())
         authMessage = label("", 13f, green).apply { setPadding(0, dp(10), 0, 0) }
         card.addView(authMessage)
         screenHost.addView(card, matchWrap())
@@ -281,7 +294,7 @@ class MainActivity : ComponentActivity() {
             val index = parent.indexOfChild(registrationOrganization)
             if (index > 0) parent.getChildAt(index - 1).visibility = if (organizationAccount) View.GONE else View.VISIBLE
         }
-        setRegistrationFieldVisible(registrationOrganizationKey, !organizationAccount)
+        setRegistrationFieldVisible(registrationOrganizationKey, role == 1 || role == 2)
     }
 
     private fun loadOrganizations() {
@@ -1221,6 +1234,9 @@ class MainActivity : ComponentActivity() {
                     showAuth()
                     registrationFields.visibility = View.VISIBLE
                     registrationAction.text = "Complete registration"
+                    signInButton.visibility = View.GONE
+                    forgotPasswordButton.visibility = View.GONE
+                    switchToLoginButton.visibility = View.VISIBLE
                     if (needsOrganization) {
                         registrationRole.setSelection(0)
                         registrationName.setText(currentProfile?.optString("full_name").orEmpty())
@@ -1247,6 +1263,26 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 authMessage.text = e.message ?: "Sign-in failed. Check your connection and account details."
+                authMessage.setTextColor(Color.rgb(170, 55, 40))
+            }
+        }
+    }
+
+    private fun requestPasswordReset() {
+        val email = emailField.text.toString().trim()
+        if (email.isBlank()) {
+            authMessage.text = "Enter your email address first, then tap Forgot password."
+            authMessage.setTextColor(Color.rgb(170, 55, 40))
+            return
+        }
+        authMessage.text = "Requesting password reset…"
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).resetPassword(email) }
+                authMessage.text = "If the account exists, a password reset email has been sent. Open the link to finish resetting your password."
+                authMessage.setTextColor(green)
+            } catch (e: Exception) {
+                authMessage.text = e.message ?: "Could not request password reset."
                 authMessage.setTextColor(Color.rgb(170, 55, 40))
             }
         }
@@ -1289,8 +1325,12 @@ class MainActivity : ComponentActivity() {
             authMessage.text = "Enter your school or institution name."
             return
         }
-        if (role != "organization_admin" && (organizationId.isBlank() || organizationKey.isBlank())) {
-            authMessage.text = "Choose your organisation and enter its key."
+        if (role != "organization_admin" && organizationId.isBlank()) {
+            authMessage.text = "Choose your organisation."
+            return
+        }
+        if ((role == "field_supervisor" || role == "institution_supervisor") && organizationKey.isBlank()) {
+            authMessage.text = "Enter the organisation key provided by your organisation."
             return
         }
         val email = emailField.text.toString().trim()
@@ -1318,7 +1358,9 @@ class MainActivity : ComponentActivity() {
                             java.util.concurrent.TimeUnit.SECONDS.toMillis(expiry), email)
                         sessionStore.save(currentSession!!)
                     } else {
-                        authMessage.text = "Account created. Confirm your email, then sign in and complete registration. Keep your organisation key ready."
+                        showAuth()
+                        emailField.setText(email)
+                        authMessage.text = "Account created. Confirm your email, then sign in to finish registration."
                         authMessage.setTextColor(green)
                         return@launch
                     }
@@ -1342,22 +1384,19 @@ class MainActivity : ComponentActivity() {
                         sessionStore.save(fresh)
                     }
                 }
-                currentProfile = withContext(Dispatchers.IO) { SupabaseApi(this@MainActivity).fetchProfile(currentSession!!) }
-                currentRole = currentProfile?.optString("role")?.ifBlank { "unregistered" } ?: "unregistered"
-                showHome()
-                observeEntries(currentSession!!.userId)
-                observeWeekly(currentSession!!.userId)
-                SyncScheduler.syncNow(this@MainActivity)
-                if (role == "organization_admin") {
-                    val key = getSharedPreferences("elogbook_org_keys", MODE_PRIVATE).getString("new_key", "")
-                    AlertDialog.Builder(this@MainActivity).setTitle("Organisation registered")
-                        .setMessage("Save this organisation key and share it only with verified members:\n\n" + key)
-                        .setPositiveButton("I saved it", null).show()
-                } else if (currentProfile?.optString("approval_status") == "pending") {
-                    AlertDialog.Builder(this@MainActivity).setTitle("Registration submitted")
-                        .setMessage("Your organisation must approve your supervisor account before you can access student records.")
-                        .setPositiveButton("OK", null).show()
+                val registeredEmail = currentSession?.email?.ifBlank { email } ?: email
+                currentSession = null
+                sessionStore.clear()
+                currentProfile = null
+                currentRole = "student"
+                showAuth()
+                emailField.setText(registeredEmail)
+                authMessage.text = when {
+                    role == "organization_admin" -> "Organisation registered. Sign in to open your workspace and retrieve the generated organisation key."
+                    role == "student" -> "Student registration completed successfully. You can now sign in."
+                    else -> "Supervisor registration submitted. Sign in after registration; your organisation must approve your account."
                 }
+                authMessage.setTextColor(green)
             } catch (e: Exception) {
                 authMessage.text = e.message ?: "Could not complete registration."
                 authMessage.setTextColor(Color.rgb(170, 55, 40))
